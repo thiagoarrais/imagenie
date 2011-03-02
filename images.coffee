@@ -10,9 +10,6 @@ fs = require 'fs'
 im = require 'imagemagick'
 
 app = express.createServer()
-app.configure( ->
-    app.use express.bodyDecoder()
-)
 
 app.put '/:album', (req, res) ->
     db.saveDoc req.params.album, {thumb : {max_height : 120, max_width: 120}}, (err, ok) ->
