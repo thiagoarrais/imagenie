@@ -8,6 +8,7 @@ db = require('couchdb').createClient(5984, 'localhost').db('images')
 temp = require 'temp'
 fs = require 'fs'
 im = require 'imagemagick'
+http = require 'http'
 
 app = express.createServer()
 
@@ -47,5 +48,22 @@ app.post '/:album', (req, res) ->
                                 )(k, v) unless nonSizes.indexOf(k) != -1
                 res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
+
+app.get '/:album/:id/:size.jpg', (req, res) ->
+    db.getDoc req.params.id, (err, doc) ->
+        if err || !doc['_attachments'][req.params.size + '.jpg']
+            res.send 404
+        else
+            res.writeHead(200, {
+                'Content-Length': doc['_attachments'][req.params.size + '.jpg'].length,
+                'Content-Type': 'image/jpeg'})
+            if 'GET' == req.method
+                request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + req.params.size + '.jpg')
+                request.on 'response', (response) ->
+                    response.on 'data', (chunk) -> res.write(chunk)
+                    response.on 'end', -> res.end()
+                request.end()
+            else
+                res.end()
 
 app.listen 8000
