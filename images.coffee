@@ -51,7 +51,7 @@ app.post '/:album', (req, res) ->
 
 app.get '/:album/:id/:size.jpg', (req, res) ->
     db.getDoc req.params.id, (err, doc) ->
-        if err || !doc['_attachments'][req.params.size]
+        if err || !doc['_attachments'][req.params.size] || req.params.album != doc.album
             res.send 404
         else
             res.writeHead(200, {
