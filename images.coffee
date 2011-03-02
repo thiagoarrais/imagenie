@@ -29,7 +29,7 @@ app.post '/:album', (req, res) ->
             db.saveDoc metadata, (err, doc) ->
                 cleanPath = temp.path('')
                 im.resize {srcPath : path, dstPath: cleanPath, width: metadata.width, height: metadata.height, quality: 0.96}, (err, stdout, stderr) ->
-                    db.saveAttachment cleanPath, doc.id, {name : 'clean.jpg', contentType: 'image/jpeg', rev : doc.rev}, ->
+                    db.saveAttachment cleanPath, doc.id, {name : 'clean', contentType: 'image/jpeg', rev : doc.rev}, ->
                         fs.unlink(path)
                         db.getDoc req.params.album, (err, album) ->
                             for k, v of album
@@ -43,7 +43,7 @@ app.post '/:album', (req, res) ->
                                         dstHeight = v.max_height
                                     im.resize {srcPath: cleanPath, dstPath: resizePath, width: dstWidth, height: dstHeight, quality: 0.96}, (err, stdout, stderr) ->
                                         db.getDoc doc.id, (err, doc) ->
-                                            db.saveAttachment resizePath, doc['_id'], {name : k + '.jpg', contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
+                                            db.saveAttachment resizePath, doc['_id'], {name : k, contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
                                                 fs.unlink(resizePath)
                                 )(k, v) unless nonSizes.indexOf(k) != -1
                 res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
@@ -51,14 +51,14 @@ app.post '/:album', (req, res) ->
 
 app.get '/:album/:id/:size.jpg', (req, res) ->
     db.getDoc req.params.id, (err, doc) ->
-        if err || !doc['_attachments'][req.params.size + '.jpg']
+        if err || !doc['_attachments'][req.params.size]
             res.send 404
         else
             res.writeHead(200, {
-                'Content-Length': doc['_attachments'][req.params.size + '.jpg'].length,
+                'Content-Length': doc['_attachments'][req.params.size].length,
                 'Content-Type': 'image/jpeg'})
             if 'GET' == req.method
-                request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + req.params.size + '.jpg')
+                request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + req.params.size)
                 request.on 'response', (response) ->
                     response.on 'data', (chunk) -> res.write(chunk)
                     response.on 'end', -> res.end()
