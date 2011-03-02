@@ -11,11 +11,20 @@ im = require 'imagemagick'
 http = require 'http'
 
 app = express.createServer()
+app.use(express.bodyDecoder())
 
 nonSizes = ['_id', '_rev']
+reservedSizes = nonSizes + ['original']
 
 app.put '/:album', (req, res) ->
-    db.saveDoc req.params.album, {thumb : {max_height : 120, max_width: 120}}, (err, ok) ->
+    if req.body
+        album = {}
+        for own sizeId, size of req.body
+            album[sizeId] = size unless reservedSizes.indexOf(sizeId) != -1
+    else
+        album = {thumb : {max_height : 120, max_width: 120}}
+
+    db.saveDoc req.params.album, album, (err, ok) ->
         res.send "{\"ok\": true}\n", 201
 
 app.post '/:album', (req, res) ->
