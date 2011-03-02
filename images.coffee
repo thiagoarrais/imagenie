@@ -67,6 +67,6 @@ retrieve = (method, album, size, id, res) ->
                 res.end()
 
 app.get '/:album/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, 'original', req.params.id, res)
-app.get '/:album/:id/:size.jpg', (req, res) -> retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
+app.get '/:album/:size/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
 
 app.listen 8000

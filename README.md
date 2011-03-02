@@ -19,9 +19,9 @@ Warning: before starting, go get some kitten JPEGs
     curl -i -H 'Content-type: image/jpeg' --data-binary @/path/to/kitten/picture.jpg http://localhost:8000/kittens
     # -> {"ok":true,"id":"2280dd0d2ecd3ebf091bea9d7d005d49"}
     # get your picture back (metadata will be striped out)
-    curl -o /tmp/kitten.jpg http://localhost:8000/kittens/2280dd0d2ecd3ebf091bea9d7d005d49/original.jpg
+    curl -o /tmp/kitten.jpg http://localhost:8000/kittens/2280dd0d2ecd3ebf091bea9d7d005d49.jpg
     # get the thumbnail
-    curl -o /tmp/kitten-thumb.jpg http://localhost:8000/kittens/2280dd0d2ecd3ebf091bea9d7d005d49/thumb.jpg
+    curl -o /tmp/kitten-thumb.jpg http://localhost:8000/kittens/thumb/2280dd0d2ecd3ebf091bea9d7d005d49.jpg
 
 'thumb' is an arbitrary size identifier, you can specify as many as you want
 like profile, reduced, email, etc.
