@@ -29,7 +29,7 @@ app.post '/:album', (req, res) ->
             db.saveDoc metadata, (err, doc) ->
                 cleanPath = temp.path('')
                 im.resize {srcPath : path, dstPath: cleanPath, width: metadata.width, height: metadata.height, quality: 0.96}, (err, stdout, stderr) ->
-                    db.saveAttachment cleanPath, doc.id, {name : 'clean', contentType: 'image/jpeg', rev : doc.rev}, ->
+                    db.saveAttachment cleanPath, doc.id, {name : 'original', contentType: 'image/jpeg', rev : doc.rev}, ->
                         fs.unlink(path)
                         db.getDoc req.params.album, (err, album) ->
                             for k, v of album
