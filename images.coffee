@@ -11,6 +11,8 @@ im = require 'imagemagick'
 
 app = express.createServer()
 
+nonSizes = ['_id', '_rev']
+
 app.put '/:album', (req, res) ->
     db.saveDoc req.params.album, {thumb : {max_height : 120, max_width: 120}}, (err, ok) ->
         res.send "{\"ok\": true}\n", 201
@@ -22,12 +24,28 @@ app.post '/:album', (req, res) ->
     req.on 'end', ->
         output.end()
         im.identify path, (err, metadata) ->
+            metadata['album'] = req.params.album
             db.saveDoc metadata, (err, doc) ->
-                resizePath = temp.path('')
-                im.resize {srcPath : path, dstPath: resizePath, width: metadata.width, height: metadata.height, quality: 0.96}, (err, stdout, stderr) ->
-                    db.saveAttachment resizePath, doc.id, {name : 'clean.jpg', contentType: 'image/jpeg', 'rev' : doc.rev}, ->
+                cleanPath = temp.path('')
+                im.resize {srcPath : path, dstPath: cleanPath, width: metadata.width, height: metadata.height, quality: 0.96}, (err, stdout, stderr) ->
+                    db.saveAttachment cleanPath, doc.id, {name : 'clean.jpg', contentType: 'image/jpeg', rev : doc.rev}, ->
                         fs.unlink(path)
-                        fs.unlink(resizePath)
+                        db.getDoc req.params.album, (err, album) ->
+                            for k, v of album
+                                ((k, v) ->
+                                    resizePath = temp.path('')
+                                    if metadata.width > metadata.height
+                                        dstWidth = v.max_width
+                                        dstHeight = 0
+                                    else
+                                        dstWidth = 0
+                                        dstHeight = v.max_height
+                                    im.resize {srcPath: cleanPath, dstPath: resizePath, width: dstWidth, height: dstHeight, quality: 0.96}, (err, stdout, stderr) ->
+                                        db.getDoc doc.id, (err, doc) ->
+                                            db.saveAttachment resizePath, doc['_id'], {name : k + '.jpg', contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
+                                                fs.unlink(resizePath)
+                                )(k, v) unless nonSizes.indexOf(k) != -1
                 res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
+
 
 app.listen 8000
