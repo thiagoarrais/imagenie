@@ -49,21 +49,24 @@ app.post '/:album', (req, res) ->
                 res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
 
-app.get '/:album/:id/:size.jpg', (req, res) ->
-    db.getDoc req.params.id, (err, doc) ->
-        if err || !doc['_attachments'][req.params.size] || req.params.album != doc.album
+retrieve = (method, album, size, id, res) ->
+    db.getDoc id, (err, doc) ->
+        if err || !doc['_attachments'][size] || album != doc.album
             res.send 404
         else
             res.writeHead(200, {
-                'Content-Length': doc['_attachments'][req.params.size].length,
+                'Content-Length': doc['_attachments'][size].length,
                 'Content-Type': 'image/jpeg'})
-            if 'GET' == req.method
-                request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + req.params.size)
+            if 'GET' == method
+                request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + size)
                 request.on 'response', (response) ->
                     response.on 'data', (chunk) -> res.write(chunk)
                     response.on 'end', -> res.end()
                 request.end()
             else
                 res.end()
+
+app.get '/:album/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, 'original', req.params.id, res)
+app.get '/:album/:id/:size.jpg', (req, res) -> retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
 
 app.listen 8000
