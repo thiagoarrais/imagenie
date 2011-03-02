@@ -24,6 +24,16 @@ Warning: before starting, go get some kitten JPEGs
 'thumb' is an arbitrary size identifier, you can specify as many as you want
 like profile, reduced, email, etc.
 
+Tech
+----
+Technologies used in this project (in no particular order)
+
+* [Node.js](http://nodejs.org)
+* [Express.js](http://expressjs.com/)
+* [CoffeeScript](http://coffeescript.org/)
+* [Imagemagick](http://www.imagemagick.org/) and [node-imagemagick](https://github.com/rsms/node-imagemagick) for node integration
+* [CouchDB](http://couchdb.apache.org/) and [node-couchdb](https://github.com/felixge/node-couchdb) for node integration
+
 License
 -------
 Licensed under the MIT license (see LICENSE for details)
