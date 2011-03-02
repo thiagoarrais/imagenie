@@ -9,6 +9,8 @@ Try this
 
 Warning: before starting, go get some kitten JPEGs
 
+    # create images database in CouchDB
+    curl -X PUT http://localhost:5984/images
     # start app
     coffee images.coffee
     # create an album named 'kittens' with thumbnails 120 pixels tall/wide
