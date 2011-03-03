@@ -9,13 +9,27 @@ temp = require 'temp'
 fs = require 'fs'
 im = require 'imagemagick'
 http = require 'http'
-EventEmitter = require('events').EventEmitter
+async = require 'async'
 
 app = express.createServer()
 app.use(express.bodyDecoder())
 
 nonSizes = ['_id', '_rev']
 reservedSizes = nonSizes + ['original']
+
+resizeTask = (origPath, origSize, name, size, id) -> (callback) ->
+    resizePath = temp.path('')
+    if origSize.width > origSize.height
+        dstWidth = size.max_width
+        dstHeight = 0
+    else
+        dstWidth = 0
+        dstHeight = size.max_height
+    im.resize {srcPath: origPath, dstPath: resizePath, width: dstWidth, height: dstHeight, quality: 0.96}, (err, stdout, stderr) ->
+        db.getDoc id, (err, doc) ->
+            db.saveAttachment resizePath, id, {name : name, contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
+                fs.unlink(resizePath)
+                callback(null, name)
 
 app.put '/:album', (req, res) ->
     if req.body
@@ -42,27 +56,9 @@ app.post '/:album', (req, res) ->
                     db.saveAttachment cleanPath, doc.id, {name : 'original', contentType: 'image/jpeg', rev : doc.rev}, ->
                         fs.unlink(path)
                         db.getDoc req.params.album, (err, album) ->
-                            resizer = new EventEmitter
-                            pending = 0
-                            for k, v of album
-                                ((k, v) ->
-                                    resizePath = temp.path('')
-                                    if metadata.width > metadata.height
-                                        dstWidth = v.max_width
-                                        dstHeight = 0
-                                    else
-                                        dstWidth = 0
-                                        dstHeight = v.max_height
-                                    pending += 1
-                                    im.resize {srcPath: cleanPath, dstPath: resizePath, width: dstWidth, height: dstHeight, quality: 0.96}, (err, stdout, stderr) ->
-                                        db.getDoc doc.id, (err, doc) ->
-                                            db.saveAttachment resizePath, doc['_id'], {name : k, contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
-                                                resizer.emit 'done'
-                                                fs.unlink(resizePath)
-                                )(k, v) unless nonSizes.indexOf(k) != -1
-                            resizer.on 'done', ->
-                                pending -= 1
-                                fs.unlink(cleanPath) if pending <= 0
+                            tasks = []
+                            (tasks.push(resizeTask(cleanPath, metadata, k, v, doc.id)) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                            async.parallel tasks, (err, results) -> fs.unlink(cleanPath) unless err
                 res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
 
