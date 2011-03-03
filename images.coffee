@@ -9,6 +9,7 @@ temp = require 'temp'
 fs = require 'fs'
 im = require 'imagemagick'
 http = require 'http'
+EventEmitter = require('events').EventEmitter
 
 app = express.createServer()
 app.use(express.bodyDecoder())
@@ -41,6 +42,8 @@ app.post '/:album', (req, res) ->
                     db.saveAttachment cleanPath, doc.id, {name : 'original', contentType: 'image/jpeg', rev : doc.rev}, ->
                         fs.unlink(path)
                         db.getDoc req.params.album, (err, album) ->
+                            resizer = new EventEmitter
+                            pending = 0
                             for k, v of album
                                 ((k, v) ->
                                     resizePath = temp.path('')
@@ -50,11 +53,16 @@ app.post '/:album', (req, res) ->
                                     else
                                         dstWidth = 0
                                         dstHeight = v.max_height
+                                    pending += 1
                                     im.resize {srcPath: cleanPath, dstPath: resizePath, width: dstWidth, height: dstHeight, quality: 0.96}, (err, stdout, stderr) ->
                                         db.getDoc doc.id, (err, doc) ->
                                             db.saveAttachment resizePath, doc['_id'], {name : k, contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
+                                                resizer.emit 'done'
                                                 fs.unlink(resizePath)
                                 )(k, v) unless nonSizes.indexOf(k) != -1
+                            resizer.on 'done', ->
+                                pending -= 1
+                                fs.unlink(cleanPath) if pending <= 0
                 res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
 
