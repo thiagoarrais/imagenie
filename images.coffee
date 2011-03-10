@@ -16,22 +16,35 @@ app.use(express.bodyDecoder())
 nonSizes = ['_id', '_rev']
 reservedSizes = nonSizes + ['original']
 
+AutoBuffer = (size) ->
+    this.buffer = new Buffer(size)
+    this.length = 0
+    this.capacity = size
+
+AutoBuffer.prototype.content = ->
+    this.buffer.slice(0, this.length)
+
+AutoBuffer.prototype.write = (data, encoding) ->
+        if this.length + data.length > this.capacity
+            old = this.buffer
+            this.buffer = new Buffer(this.capacity * 2)
+            old.copy(this.buffer, 0, 0, this.length)
+        this.buffer.write(data, this.length, encoding)
+        this.length += data.length
+
 client = null
 resize = (imgSource, origSize, name, size, id) ->
     if origSize.width > origSize.height
         dstHeight = dstWidth = size.max_width
     else
         dstWidth = dstHeight = size.max_height
-    imgResized = new Buffer(imgSource.length)
-    length = 0
+    imgResized = new AutoBuffer imgSource.length
     resize = child.spawn 'convert', ['jpeg:-',
                                      '-resize', String(dstWidth)+'x'+String(dstHeight),
                                      '-quality', '96',
                                      'jpeg:-']
     resize.stdout.setEncoding 'binary'
-    resize.stdout.on 'data', (chunk) ->
-        imgResized.write(chunk, length, 'binary')
-        length += chunk.length
+    resize.stdout.on 'data', (chunk) -> imgResized.write(chunk, 'binary')
     resize.on 'exit', ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
@@ -40,7 +53,7 @@ resize = (imgSource, origSize, name, size, id) ->
                 req.on 'response', (response) ->
                     retry(id, name, imgData) if response.statusCode == 409
                 req.end imgData, null
-        retry id, name, imgResized.slice(0, length)
+        retry id, name, imgResized.content()
 
     resize.stdin.end imgSource
 
@@ -56,8 +69,7 @@ app.put '/:album', (req, res) ->
         res.send "{\"ok\": true}\n", 201
 
 app.post '/:album', (req, res) ->
-    imgData = new Buffer parseInt(req.headers['content-length'])
-    pos = 0
+    imgData = new AutoBuffer parseInt(req.headers['content-length'])
     imgInfo = ''
     identify = child.spawn('identify', ['-'])
     identify.stdout.on 'data', (chunk) -> imgInfo += chunk
@@ -71,30 +83,26 @@ app.post '/:album', (req, res) ->
             depth: parseInt v[4]
             album: req.params.album
         db.saveDoc metadata, (err, doc) ->
-            imgClean = new Buffer(imgData.length * 2)
-            pos = 0
+            imgClean = new AutoBuffer(imgData.length * 2)
             clean = child.spawn 'convert', ['jpeg:-',
                                             '-resize', String(metadata.width)+'x'+String(metadata.height),
                                             '-quality', '96',
                                             'jpeg:-']
             clean.stdout.setEncoding 'binary'
-            clean.stdout.on 'data', (chunk) ->
-                imgClean.write(chunk, pos, 'binary')
-                pos += chunk.length
+            clean.stdout.on 'data', (chunk) -> imgClean.write(chunk, 'binary')
             clean.on 'exit', ->
-                request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': pos})
+                request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': imgClean.length})
                 request.on 'response', ->
                     db.getDoc req.params.album, (err, album) ->
-                        (resize(imgClean.slice(0, pos), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
-                request.end(imgClean.slice(0, pos), null)
-            clean.stdin.end imgData
+                        (resize(imgClean.content(), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                request.end imgClean.content(), null
+            clean.stdin.end imgData.content()
             res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
     req.setEncoding 'binary'
     req.on 'data', (chunk) ->
-        imgData.write(chunk, pos, 'binary')
+        imgData.write(chunk, 'binary')
         identify.stdin.write(chunk, 'binary')
-        pos += chunk.length
     req.on 'end', ->
         identify.stdin.end()
 
