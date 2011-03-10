@@ -27,7 +27,8 @@ AutoBuffer.prototype.content = ->
 AutoBuffer.prototype.write = (data, encoding) ->
         if this.length + data.length > this.capacity
             old = this.buffer
-            this.buffer = new Buffer(this.capacity * 2)
+            this.capacity *= 2
+            this.buffer = new Buffer(this.capacity)
             old.copy(this.buffer, 0, 0, this.length)
         this.buffer.write(data, this.length, encoding)
         this.length += data.length
