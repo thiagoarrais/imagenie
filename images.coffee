@@ -5,9 +5,8 @@ imagenie: an image hosting service
 
 express = require 'express'
 db = require('couchdb').createClient(5984, 'localhost').db('images')
-temp = require 'temp'
 fs = require 'fs'
-im = require 'imagemagick'
+child = require 'child_process'
 http = require 'http'
 async = require 'async'
 
@@ -17,19 +16,33 @@ app.use(express.bodyDecoder())
 nonSizes = ['_id', '_rev']
 reservedSizes = nonSizes + ['original']
 
-resizeTask = (origPath, origSize, name, size, id) -> (callback) ->
-    resizePath = temp.path('')
+client = null
+resize = (imgSource, origSize, name, size, id) ->
     if origSize.width > origSize.height
-        dstWidth = size.max_width
-        dstHeight = 0
+        dstHeight = dstWidth = size.max_width
     else
-        dstWidth = 0
-        dstHeight = size.max_height
-    im.resize {srcPath: origPath, dstPath: resizePath, width: dstWidth, height: dstHeight, quality: 0.96}, (err, stdout, stderr) ->
-        db.getDoc id, (err, doc) ->
-            db.saveAttachment resizePath, id, {name : name, contentType: 'image/jpeg', rev : doc['_rev']}, (err) ->
-                fs.unlink(resizePath)
-                callback(null, name)
+        dstWidth = dstHeight = size.max_height
+    imgResized = new Buffer(imgSource.length)
+    length = 0
+    resize = child.spawn 'convert', ['jpeg:-',
+                                     '-resize', String(dstWidth)+'x'+String(dstHeight),
+                                     '-quality', '96',
+                                     'jpeg:-']
+    resize.stdout.setEncoding 'binary'
+    resize.stdout.on 'data', (chunk) ->
+        imgResized.write(chunk, length, 'binary')
+        length += chunk.length
+    resize.on 'exit', ->
+        retry = (id, name, imgData) ->
+            db.getDoc id, (err, doc) ->
+                client ||= http.createClient(5984)
+                req = client.request 'PUT', '/images/'+id+'/'+name+'?rev='+doc['_rev'], {'Content-Type' : 'image/jpeg', 'Content-Length' : imgData.length}
+                req.on 'response', (response) ->
+                    retry(id, name, imgData) if response.statusCode == 409
+                req.end imgData, null
+        retry id, name, imgResized.slice(0, length)
+
+    resize.stdin.end imgSource
 
 app.put '/:album', (req, res) ->
     if req.body
@@ -43,24 +56,47 @@ app.put '/:album', (req, res) ->
         res.send "{\"ok\": true}\n", 201
 
 app.post '/:album', (req, res) ->
-    path = temp.path('')
-    output = fs.createWriteStream(path)
-    req.on 'data', (chunk) -> output.write(chunk)
-    req.on 'end', ->
-        output.end()
-        im.identify path, (err, metadata) ->
-            metadata['album'] = req.params.album
-            db.saveDoc metadata, (err, doc) ->
-                cleanPath = temp.path('')
-                im.resize {srcPath : path, dstPath: cleanPath, width: metadata.width, height: metadata.height, quality: 0.96}, (err, stdout, stderr) ->
-                    db.saveAttachment cleanPath, doc.id, {name : 'original', contentType: 'image/jpeg', rev : doc.rev}, ->
-                        fs.unlink(path)
-                        db.getDoc req.params.album, (err, album) ->
-                            tasks = []
-                            (tasks.push(resizeTask(cleanPath, metadata, k, v, doc.id)) unless nonSizes.indexOf(k) != -1) for own k, v of album
-                            async.parallel tasks, (err, results) -> fs.unlink(cleanPath) unless err
-                res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
+    imgData = new Buffer parseInt(req.headers['content-length'])
+    pos = 0
+    imgInfo = ''
+    identify = child.spawn('identify', ['-'])
+    identify.stdout.on 'data', (chunk) -> imgInfo += chunk
+    identify.on 'exit', ->
+        v = imgInfo.split ' '
+        x = v[2].split 'x'
+        metadata =
+            format: v[1]
+            width: parseInt x[0]
+            height: parseInt x[1]
+            depth: parseInt v[4]
+            album: req.params.album
+        db.saveDoc metadata, (err, doc) ->
+            imgClean = new Buffer(imgData.length * 2)
+            pos = 0
+            clean = child.spawn 'convert', ['jpeg:-',
+                                            '-resize', String(metadata.width)+'x'+String(metadata.height),
+                                            '-quality', '96',
+                                            'jpeg:-']
+            clean.stdout.setEncoding 'binary'
+            clean.stdout.on 'data', (chunk) ->
+                imgClean.write(chunk, pos, 'binary')
+                pos += chunk.length
+            clean.on 'exit', ->
+                request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': pos})
+                request.on 'response', ->
+                    db.getDoc req.params.album, (err, album) ->
+                        (resize(imgClean.slice(0, pos), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                request.end(imgClean.slice(0, pos), null)
+            clean.stdin.end imgData
+            res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
+    req.setEncoding 'binary'
+    req.on 'data', (chunk) ->
+        imgData.write(chunk, pos, 'binary')
+        identify.stdin.write(chunk, 'binary')
+        pos += chunk.length
+    req.on 'end', ->
+        identify.stdin.end()
 
 retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, doc) ->
