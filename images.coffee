@@ -9,6 +9,7 @@ fs = require 'fs'
 child = require 'child_process'
 http = require 'http'
 async = require 'async'
+im = require 'imagemagick'
 
 app = express.createServer()
 app.use(express.bodyDecoder())
@@ -39,24 +40,15 @@ resize = (imgSource, origSize, name, size, id) ->
         dstHeight = dstWidth = size.max_width
     else
         dstWidth = dstHeight = size.max_height
-    imgResized = new AutoBuffer imgSource.length
-    resize = child.spawn 'convert', ['jpeg:-',
-                                     '-resize', String(dstWidth)+'x'+String(dstHeight),
-                                     '-quality', '96',
-                                     'jpeg:-']
-    resize.stdout.setEncoding 'binary'
-    resize.stdout.on 'data', (chunk) -> imgResized.write(chunk, 'binary')
-    resize.on 'exit', ->
+    im.resize {srcData: imgSource, quality: 0.96, width: dstWidth, height: dstHeight}, (err, imgResized, stderr) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 client ||= http.createClient(5984)
                 req = client.request 'PUT', '/images/'+id+'/'+name+'?rev='+doc['_rev'], {'Content-Type' : 'image/jpeg', 'Content-Length' : imgData.length}
                 req.on 'response', (response) ->
                     retry(id, name, imgData) if response.statusCode == 409
-                req.end imgData, null
-        retry id, name, imgResized.content()
-
-    resize.stdin.end imgSource
+                req.end imgData, 'binary'
+        retry id, name, imgResized
 
 app.put '/:album', (req, res) ->
     if req.body
@@ -84,20 +76,12 @@ app.post '/:album', (req, res) ->
             depth: parseInt v[4]
             album: req.params.album
         db.saveDoc metadata, (err, doc) ->
-            imgClean = new AutoBuffer(imgData.length * 2)
-            clean = child.spawn 'convert', ['jpeg:-',
-                                            '-resize', String(metadata.width)+'x'+String(metadata.height),
-                                            '-quality', '96',
-                                            'jpeg:-']
-            clean.stdout.setEncoding 'binary'
-            clean.stdout.on 'data', (chunk) -> imgClean.write(chunk, 'binary')
-            clean.on 'exit', ->
+            im.resize {srcData: imgData.content(), quality: 0.96, width: metadata.width, height: metadata.height}, (err, imgClean, stderr) ->
                 request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': imgClean.length})
                 request.on 'response', ->
                     db.getDoc req.params.album, (err, album) ->
-                        (resize(imgClean.content(), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
-                request.end imgClean.content(), null
-            clean.stdin.end imgData.content()
+                        (resize(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                request.end imgClean, 'binary'
             res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
     req.setEncoding 'binary'
