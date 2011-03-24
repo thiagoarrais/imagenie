@@ -63,18 +63,8 @@ app.put '/:album', (req, res) ->
 
 app.post '/:album', (req, res) ->
     imgData = new AutoBuffer parseInt(req.headers['content-length'])
-    imgInfo = ''
-    identify = child.spawn('identify', ['-'])
-    identify.stdout.on 'data', (chunk) -> imgInfo += chunk
-    identify.on 'exit', ->
-        v = imgInfo.split ' '
-        x = v[2].split 'x'
-        metadata =
-            format: v[1]
-            width: parseInt x[0]
-            height: parseInt x[1]
-            depth: parseInt v[4]
-            album: req.params.album
+    identify = im.identify (err, metadata) ->
+        metadata.album = req.params.album
         db.saveDoc metadata, (err, doc) ->
             im.resize {srcData: imgData.content(), quality: 0.96, width: metadata.width, height: metadata.height}, (err, imgClean, stderr) ->
                 request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': imgClean.length})
@@ -88,8 +78,7 @@ app.post '/:album', (req, res) ->
     req.on 'data', (chunk) ->
         imgData.write(chunk, 'binary')
         identify.stdin.write(chunk, 'binary')
-    req.on 'end', ->
-        identify.stdin.end()
+    req.on 'end', -> identify.stdin.end()
 
 retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, doc) ->
