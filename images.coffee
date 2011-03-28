@@ -26,13 +26,13 @@ AutoBuffer.prototype.content = ->
     this.buffer.slice(0, this.length)
 
 AutoBuffer.prototype.write = (data, encoding) ->
-        if this.length + data.length > this.capacity
-            old = this.buffer
-            this.capacity *= 2
-            this.buffer = new Buffer(this.capacity)
-            old.copy(this.buffer, 0, 0, this.length)
-        this.buffer.write(data, this.length, encoding)
-        this.length += data.length
+    if this.length + data.length > this.capacity
+        old = this.buffer
+        this.capacity *= 2
+        this.buffer = new Buffer(this.capacity)
+        old.copy(this.buffer, 0, 0, this.length)
+    this.buffer.write(data, this.length, encoding)
+    this.length += data.length
 
 client = null
 resize = (imgSource, origSize, name, size, id) ->
