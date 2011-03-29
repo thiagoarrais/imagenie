@@ -25,6 +25,9 @@ AutoBuffer = (size) ->
 AutoBuffer.prototype.content = ->
     this.buffer.slice(0, this.length)
 
+AutoBuffer.prototype.end = ->
+    this.buffer = this.content()
+
 AutoBuffer.prototype.write = (data, encoding) ->
     if this.length + data.length > this.capacity
         old = this.buffer
@@ -40,15 +43,16 @@ resize = (imgSource, origSize, name, size, id) ->
         dstHeight = dstWidth = size.max_width
     else
         dstWidth = dstHeight = size.max_height
-    im.resize {srcData: imgSource, quality: 0.96, width: dstWidth, height: dstHeight}, (err, imgResized, stderr) ->
+    imgResized = new AutoBuffer(imgSource.length)
+    im.resize {srcData: imgSource, destination: imgResized, quality: 0.96, width: dstWidth, height: dstHeight}, (err, stderr) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 client ||= http.createClient(5984)
                 req = client.request 'PUT', '/images/'+id+'/'+name+'?rev='+doc['_rev'], {'Content-Type' : 'image/jpeg', 'Content-Length' : imgData.length}
                 req.on 'response', (response) ->
                     retry(id, name, imgData) if response.statusCode == 409
-                req.end imgData, 'binary'
-        retry id, name, imgResized
+                req.end imgData
+        retry id, name, imgResized.content()
 
 app.put '/:album', (req, res) ->
     if req.body
@@ -66,12 +70,13 @@ app.post '/:album', (req, res) ->
     identify = im.identify (err, metadata) ->
         metadata.album = req.params.album
         db.saveDoc metadata, (err, doc) ->
-            im.resize {srcData: imgData.content(), quality: 0.96, width: metadata.width, height: metadata.height}, (err, imgClean, stderr) ->
+            imgClean = new AutoBuffer(imgData.length * 2)
+            im.resize {srcData: imgData.content(), destination: imgClean, quality: 0.96, width: metadata.width, height: metadata.height}, (err, stderr) ->
                 request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': imgClean.length})
                 request.on 'response', ->
                     db.getDoc req.params.album, (err, album) ->
-                        (resize(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
-                request.end imgClean, 'binary'
+                        (resize(imgClean.content(), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                request.end imgClean.content()
             res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
     req.setEncoding 'binary'
