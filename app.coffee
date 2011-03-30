@@ -74,7 +74,7 @@ retrieve = (method, album, size, id, res) ->
             if 'GET' == method
                 request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + size)
                 request.on 'response', (response) ->
-                    response.on 'data', (chunk) -> res.write(chunk)
+                    response.on 'data', res.write.bind(res)
                     response.on 'end', -> res.end()
                 request.end()
             else
