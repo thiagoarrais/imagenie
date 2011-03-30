@@ -72,11 +72,11 @@ retrieve = (method, album, size, id, res) ->
                 'Content-Length': doc['_attachments'][size].length,
                 'Content-Type': 'image/jpeg'})
             if 'GET' == method
-                request = http.createClient(5984).request('GET', '/images/' + doc['_id'] + '/' + size)
-                request.on 'response', (response) ->
-                    response.on 'data', res.write.bind(res)
-                    response.on 'end', -> res.end()
-                request.end()
+                db.getStreamingAttachment id, size, (err, chunk) ->
+                    if !err && chunk
+                        res.write(chunk, 'binary')
+                    else
+                        res.end()
             else
                 res.end()
 
