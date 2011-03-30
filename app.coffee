@@ -5,10 +5,7 @@ imagenie: an image hosting service
 
 express = require 'express'
 db = require('couchdb').createClient(5984, 'localhost').db('images')
-fs = require 'fs'
-child = require 'child_process'
 http = require 'http'
-async = require 'async'
 im = require 'imagemagick'
 AutoBuffer = require './autobuffer'
 
