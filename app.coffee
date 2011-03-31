@@ -14,20 +14,22 @@ app.use(express.bodyDecoder())
 nonSizes = ['_id', '_rev']
 reservedSizes = nonSizes + ['original']
 
-resize = (imgSource, origSize, name, size, id) ->
+resize = (imgSource, imgResized, width, height, callback) ->
+    stream = im.resize {srcData: imgSource, quality: 0.96, width: width, height: height}
+    stream.on 'data', imgResized.write.bind(imgResized)
+    stream.on 'end', (err, stderr) -> callback(imgResized.content())
+
+saveResized = (imgSource, origSize, name, size, id) ->
     if origSize.width > origSize.height
         dstHeight = dstWidth = size.max_width
     else
         dstWidth = dstHeight = size.max_height
-    imgResized = new AutoBuffer(imgSource.length)
-    stream = im.resize {srcData: imgSource, quality: 0.96, width: dstWidth, height: dstHeight}
-    stream.on 'data', imgResized.write.bind(imgResized)
-    stream.on 'end', (err, stderr) ->
+    resize imgSource, new AutoBuffer(imgSource.length), dstWidth, dstHeight, (imgResized) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
                     retry(id, name, imgData) if err && err.error == 'conflict'
-        retry id, name, imgResized.content()
+        retry id, name, imgResized
 
 app.put '/:album', (req, res) ->
     if req.body
@@ -45,13 +47,10 @@ app.post '/:album', (req, res) ->
     identify = im.identify (err, metadata) ->
         metadata.album = req.params.album
         db.saveDoc metadata, (err, doc) ->
-            imgClean = new AutoBuffer(imgData.length * 2)
-            stream = im.resize {srcData: imgData.content(), quality: 0.96, width: metadata.width, height: metadata.height}
-            stream.on 'data', imgClean.write.bind(imgClean)
-            stream.on 'end', (err, stderr) ->
-                db.saveBufferedAttachment imgClean.content(), doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'}, (err) ->
+            resize imgData.content(), new AutoBuffer(imgData.length * 2), metadata.width, metadata.height, (imgClean) ->
+                db.saveBufferedAttachment imgClean, doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'}, (err) ->
                     db.getDoc req.params.album, (err, album) ->
-                        (resize(imgClean.content(), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                        (saveResized(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
             res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
     req.setEncoding 'binary'
