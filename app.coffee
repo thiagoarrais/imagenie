@@ -20,7 +20,9 @@ resize = (imgSource, origSize, name, size, id) ->
     else
         dstWidth = dstHeight = size.max_height
     imgResized = new AutoBuffer(imgSource.length)
-    im.resize {srcData: imgSource, destination: imgResized, quality: 0.96, width: dstWidth, height: dstHeight}, (err, stderr) ->
+    stream = im.resize {srcData: imgSource, quality: 0.96, width: dstWidth, height: dstHeight}
+    stream.on 'data', imgResized.write.bind(imgResized)
+    stream.on 'end', (err, stderr) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
@@ -44,7 +46,9 @@ app.post '/:album', (req, res) ->
         metadata.album = req.params.album
         db.saveDoc metadata, (err, doc) ->
             imgClean = new AutoBuffer(imgData.length * 2)
-            im.resize {srcData: imgData.content(), destination: imgClean, quality: 0.96, width: metadata.width, height: metadata.height}, (err, stderr) ->
+            stream = im.resize {srcData: imgData.content(), quality: 0.96, width: metadata.width, height: metadata.height}
+            stream.on 'data', imgClean.write.bind(imgClean)
+            stream.on 'end', (err, stderr) ->
                 db.saveBufferedAttachment imgClean.content(), doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'}, (err) ->
                     db.getDoc req.params.album, (err, album) ->
                         (resize(imgClean.content(), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
@@ -65,11 +69,9 @@ retrieve = (method, album, size, id, res) ->
                 'Content-Length': doc['_attachments'][size].length,
                 'Content-Type': 'image/jpeg'})
             if 'GET' == method
-                db.getStreamingAttachment id, size, (err, chunk) ->
-                    if !err && chunk
-                        res.write(chunk, 'binary')
-                    else
-                        res.end()
+                stream = db.getStreamingAttachment id, size
+                stream.on 'data', (chunk) -> res.write(chunk, 'binary')
+                stream.on 'end', -> res.end()
             else
                 res.end()
 
