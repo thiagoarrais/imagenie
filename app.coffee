@@ -5,7 +5,6 @@ imagenie: an image hosting service
 
 express = require 'express'
 db = require('couchdb').createClient(5984, 'localhost').db('images')
-http = require 'http'
 im = require 'imagemagick'
 AutoBuffer = require './autobuffer'
 
@@ -15,7 +14,6 @@ app.use(express.bodyDecoder())
 nonSizes = ['_id', '_rev']
 reservedSizes = nonSizes + ['original']
 
-client = null
 resize = (imgSource, origSize, name, size, id) ->
     if origSize.width > origSize.height
         dstHeight = dstWidth = size.max_width
@@ -25,11 +23,8 @@ resize = (imgSource, origSize, name, size, id) ->
     im.resize {srcData: imgSource, destination: imgResized, quality: 0.96, width: dstWidth, height: dstHeight}, (err, stderr) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
-                client ||= http.createClient(5984)
-                req = client.request 'PUT', '/images/'+id+'/'+name+'?rev='+doc['_rev'], {'Content-Type' : 'image/jpeg', 'Content-Length' : imgData.length}
-                req.on 'response', (response) ->
-                    retry(id, name, imgData) if response.statusCode == 409
-                req.end imgData
+                db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
+                    retry(id, name, imgData) if err && err.error == 'conflict'
         retry id, name, imgResized.content()
 
 app.put '/:album', (req, res) ->
@@ -50,11 +45,9 @@ app.post '/:album', (req, res) ->
         db.saveDoc metadata, (err, doc) ->
             imgClean = new AutoBuffer(imgData.length * 2)
             im.resize {srcData: imgData.content(), destination: imgClean, quality: 0.96, width: metadata.width, height: metadata.height}, (err, stderr) ->
-                request = http.createClient(5984).request('PUT', '/images/' + doc.id + '/original?rev=' + doc.rev, {'Content-Type' : 'image/jpg', 'Content-Length': imgClean.length})
-                request.on 'response', ->
+                db.saveBufferedAttachment imgClean.content(), doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'}, (err) ->
                     db.getDoc req.params.album, (err, album) ->
                         (resize(imgClean.content(), metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
-                request.end imgClean.content()
             res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
     req.setEncoding 'binary'
