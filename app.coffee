@@ -6,12 +6,14 @@ imagenie: an image hosting service
 express = require 'express'
 db = require('couchdb').createClient(5984, 'localhost').db('images')
 im = require 'imagemagick'
+crypto = require 'crypto'
+
 AutoBuffer = require './autobuffer'
 
 app = express.createServer()
 app.use(express.bodyDecoder())
 
-nonSizes = ['_id', '_rev']
+nonSizes = ['_id', '_rev', 'rev', 'hash']
 reservedSizes = nonSizes + ['original']
 
 resize = (imgSource, imgResized, width, height, callback) ->
@@ -31,6 +33,12 @@ saveResized = (imgSource, origSize, name, size, id) ->
                     retry(id, name, imgData) if err && err.error == 'conflict'
         retry id, name, imgResized
 
+hash_for = (name, rev) ->
+    hash = crypto.createHash 'sha1'
+    hash.update name
+    hash.update String(rev)
+    hash.digest 'hex'
+
 app.put '/:album', (req, res) ->
     if req.body
         album = {}
@@ -38,6 +46,9 @@ app.put '/:album', (req, res) ->
             album[sizeId] = size unless reservedSizes.indexOf(sizeId) != -1
     else
         album = {thumb : {max_height : 120, max_width: 120}}
+
+    album.rev = 1
+    album.hash = hash_for req.params.album, album.rev
 
     db.saveDoc req.params.album, album, (err, ok) ->
         res.send "{\"ok\": true}\n", 201
