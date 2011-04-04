@@ -58,7 +58,7 @@ app.put '/:album', (req, res) ->
             album['_rev'] = doc['_rev'] if doc?
 
             db.saveDoc req.params.album, album, (err, ok) ->
-                res.send "{\"ok\": true}\n", 201
+                res.send(JSON.stringify(ok: true, hash: album.hash) + "\n", 201)
 
 app.post '/:album', (req, res) ->
     imgData = new AutoBuffer parseInt(req.headers['content-length'])
