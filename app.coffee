@@ -40,18 +40,25 @@ hash_for = (name, rev) ->
     hash.digest 'hex'
 
 app.put '/:album', (req, res) ->
-    if req.body
-        album = {}
-        for own sizeId, size of req.body
-            album[sizeId] = size unless reservedSizes.indexOf(sizeId) != -1
-    else
-        album = {thumb : {max_height : 120, max_width: 120}}
+    db.getDoc req.params.album, (err, doc) ->
+        if err && 'not_found' != err.error
+            res.send "{\"error\" : \"unknown\"}\n", 500
+        else if !err && req.query.hash != doc.hash
+            res.send "{\"error\" : \"conflict\"}\n", 409
+        else
+            if req.body
+                album = {}
+                for own sizeId, size of req.body
+                    album[sizeId] = size unless reservedSizes.indexOf(sizeId) != -1
+            else
+                album = {thumb : {max_height : 120, max_width: 120}}
 
-    album.rev = 1
-    album.hash = hash_for req.params.album, album.rev
+            album.rev = if doc? then doc.rev + 1 else 1
+            album.hash = hash_for req.params.album, album.rev
+            album['_rev'] = doc['_rev'] if doc?
 
-    db.saveDoc req.params.album, album, (err, ok) ->
-        res.send "{\"ok\": true}\n", 201
+            db.saveDoc req.params.album, album, (err, ok) ->
+                res.send "{\"ok\": true}\n", 201
 
 app.post '/:album', (req, res) ->
     imgData = new AutoBuffer parseInt(req.headers['content-length'])
