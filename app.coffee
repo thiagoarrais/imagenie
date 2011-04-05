@@ -33,6 +33,26 @@ saveResized = (imgSource, origSize, name, size, id) ->
                     retry(id, name, imgData) if err && err.error == 'conflict'
         retry id, name, imgResized
 
+cacheSize = (id, name, size, image, response) ->
+    imgOriginal = new AutoBuffer(image['_attachments'].original.length)
+    stream = db.getStreamingAttachment id, 'original'
+    stream.on 'data', (chunk) -> imgOriginal.write(chunk, 'binary')
+    stream.on 'end', ->
+        if image.width > image.height
+            dstHeight = dstWidth = size.max_width
+        else
+            dstWidth = dstHeight = size.max_height
+        resize imgOriginal.content(), new AutoBuffer(imgOriginal.length), dstWidth, dstHeight, (imgResized) ->
+            retry = (id, name, imgData) ->
+                db.getDoc id, (err, doc) ->
+                    db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
+                        retry(id, name, imgData) if err && err.error == 'conflict'
+            response.writeHead(200, {
+                'Content-Length': imgResized.length,
+                'Content-Type': 'image/jpeg'})
+            response.end(imgResized)
+            retry id, name, imgResized
+
 hash_for = (name, rev) ->
     hash = crypto.createHash 'sha1'
     hash.update name
@@ -78,12 +98,19 @@ app.post '/:album', (req, res) ->
     req.on 'end', -> identify.stdin.end()
 
 retrieve = (method, album, size, id, res) ->
-    db.getDoc id, (err, doc) ->
-        if err || !doc['_attachments'][size] || album != doc.album
+    db.getDoc id, (err, image) ->
+        if err || album != image.album
             res.send 404
+        else if !image['_attachments'][size]
+            db.getDoc album, (err, album) ->
+                if err || !album[size]
+                    console.log 'album does not have this size (' + size + ')?'
+                    res.send 404
+                else
+                    cacheSize id, size, album[size], image, res
         else
             res.writeHead(200, {
-                'Content-Length': doc['_attachments'][size].length,
+                'Content-Length': image['_attachments'][size].length,
                 'Content-Type': 'image/jpeg'})
             if 'GET' == method
                 stream = db.getStreamingAttachment id, size
