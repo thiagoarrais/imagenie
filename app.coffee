@@ -21,7 +21,7 @@ resize = (imgSource, imgResized, width, height, callback) ->
     stream.on 'data', imgResized.write.bind(imgResized)
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
-saveResized = (imgSource, origSize, name, size, id) ->
+saveResized = (imgSource, origSize, name, size, id, callback) ->
     if origSize.width > origSize.height
         dstHeight = dstWidth = size.max_width
     else
@@ -31,27 +31,19 @@ saveResized = (imgSource, origSize, name, size, id) ->
             db.getDoc id, (err, doc) ->
                 db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
                     retry(id, name, imgData) if err && err.error == 'conflict'
+        callback(imgResized) if callback?
         retry id, name, imgResized
 
 cacheSize = (id, name, size, image, response) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
     stream = db.getStreamingAttachment id, 'original'
     stream.on 'data', (chunk) -> imgOriginal.write(chunk, 'binary')
-    stream.on 'end', ->
-        if image.width > image.height
-            dstHeight = dstWidth = size.max_width
-        else
-            dstWidth = dstHeight = size.max_height
-        resize imgOriginal.content(), new AutoBuffer(imgOriginal.length), dstWidth, dstHeight, (imgResized) ->
-            retry = (id, name, imgData) ->
-                db.getDoc id, (err, doc) ->
-                    db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
-                        retry(id, name, imgData) if err && err.error == 'conflict'
-            response.writeHead(200, {
-                'Content-Length': imgResized.length,
-                'Content-Type': 'image/jpeg'})
-            response.end(imgResized)
-            retry id, name, imgResized
+    stream.on 'end', -> saveResized(imgOriginal.content(), image, name, size, id, (imgResized) ->
+        response.writeHead(200, {
+            'Content-Length': imgResized.length,
+            'Content-Type': 'image/jpeg'})
+        response.end(imgResized)
+    )
 
 hash_for = (name, rev) ->
     hash = crypto.createHash 'sha1'
