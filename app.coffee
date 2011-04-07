@@ -22,7 +22,7 @@ resize = (imgSource, imgResized, width, height, callback) ->
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
 saveResized = (imgSource, origSize, name, size, id, callback) ->
-    if origSize.width > origSize.height
+    if origSize.width / origSize.height * size.max_height > size.max_width
         dstHeight = dstWidth = size.max_width
     else
         dstWidth = dstHeight = size.max_height
