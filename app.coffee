@@ -29,14 +29,16 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
     resize imgSource, new AutoBuffer(imgSource.length), dstWidth, dstHeight, (imgResized) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
-                db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err, att) ->
-                    if !err
-                        doc.cache ||= {}
-                        doc.cache[name] = {width: dstWidth, height: dstHeight}
-                        doc['_rev'] = att.rev
-                        db.saveDoc id, doc
-                    else
-                        retry(id, name, imgData) if err.error == 'conflict'
+                db.saveBufferedAttachment imgData,
+                    id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name},
+                    (err, att) ->
+                        if !err
+                            doc.cache ||= {}
+                            doc.cache[name] = {width: dstWidth, height: dstHeight}
+                            doc['_rev'] = att.rev
+                            db.saveDoc id, doc
+                        else
+                            retry(id, name, imgData) if err.error == 'conflict'
         callback(imgResized) if callback?
         retry id, name, imgResized
 
@@ -84,9 +86,12 @@ app.post '/:album', (req, res) ->
         metadata.album = req.params.album
         db.saveDoc metadata, (err, doc) ->
             resize imgData.content(), new AutoBuffer(imgData.length * 2), metadata.width, metadata.height, (imgClean) ->
-                db.saveBufferedAttachment imgClean, doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'}, (err) ->
-                    db.getDoc req.params.album, (err, album) ->
-                        (saveResized(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1) for own k, v of album
+                db.saveBufferedAttachment imgClean,
+                    doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'},
+                    (err) ->
+                        db.getDoc req.params.album, (err, album) ->
+                            for own k, v of album
+                                (saveResized(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
             res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
 
     req.setEncoding 'binary'
@@ -104,8 +109,10 @@ retrieve = (method, album, size, id, res) ->
                 if err || 'original' != size && !album[size]
                     console.log 'album does not have this size (' + size + ')?'
                     res.send 404
-                else if 'original' != size && (!(cached = image.cache[size]) || cached.height != album[size].height && cached.width != album[size].width)
-                    cacheSize id, size, album[size], image, res
+                else if 'original' != size &&
+                    (   !(cached = image.cache[size]) ||
+                        cached.height != album[size].height && cached.width != album[size].width)
+                            cacheSize id, size, album[size], image, res
                 else
                     res.writeHead(200, {
                         'Content-Length': image['_attachments'][size].length,
