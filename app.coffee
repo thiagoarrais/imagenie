@@ -16,7 +16,8 @@ app.use(express.bodyDecoder())
 nonSizes = ['_id', '_rev', 'rev', 'hash']
 reservedSizes = nonSizes + ['original']
 
-resize = (imgSource, imgResized, width, height, callback) ->
+resize = (imgSource, width, height, callback) ->
+    imgResized = new AutoBuffer(imgSource.length)
     stream = im.resize {srcData: imgSource, quality: 0.96, width: width, height: height}
     stream.on 'data', imgResized.write.bind(imgResized)
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
@@ -26,7 +27,7 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
         dstHeight = dstWidth = size.max_width
     else
         dstWidth = dstHeight = size.max_height
-    resize imgSource, new AutoBuffer(imgSource.length), dstWidth, dstHeight, (imgResized) ->
+    resize imgSource, dstWidth, dstHeight, (imgResized) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 db.saveBufferedAttachment imgData,
@@ -85,7 +86,7 @@ app.post '/:album', (req, res) ->
     identify = im.identify (err, metadata) ->
         metadata.album = req.params.album
         db.saveDoc metadata, (err, doc) ->
-            resize imgData.content(), new AutoBuffer(imgData.length * 2), metadata.width, metadata.height, (imgClean) ->
+            resize imgData.content(), metadata.width, metadata.height, (imgClean) ->
                 db.saveBufferedAttachment imgClean,
                     doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'},
                     (err) ->
