@@ -29,8 +29,14 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
     resize imgSource, new AutoBuffer(imgSource.length), dstWidth, dstHeight, (imgResized) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
-                db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err) ->
-                    retry(id, name, imgData) if err && err.error == 'conflict'
+                db.saveBufferedAttachment imgData, id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name}, (err, att) ->
+                    if !err
+                        doc.cache ||= {}
+                        doc.cache[name] = {width: dstWidth, height: dstHeight}
+                        doc['_rev'] = att.rev
+                        db.saveDoc id, doc
+                    else
+                        retry(id, name, imgData) if err.error == 'conflict'
         callback(imgResized) if callback?
         retry id, name, imgResized
 
@@ -93,23 +99,23 @@ retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, image) ->
         if err || album != image.album
             res.send 404
-        else if !image['_attachments'][size]
+        else
             db.getDoc album, (err, album) ->
-                if err || !album[size]
+                if err || 'original' != size && !album[size]
                     console.log 'album does not have this size (' + size + ')?'
                     res.send 404
-                else
+                else if 'original' != size && (!(cached = image.cache[size]) || cached.height != album[size].height && cached.width != album[size].width)
                     cacheSize id, size, album[size], image, res
-        else
-            res.writeHead(200, {
-                'Content-Length': image['_attachments'][size].length,
-                'Content-Type': 'image/jpeg'})
-            if 'GET' == method
-                stream = db.getStreamingAttachment id, size
-                stream.on 'data', (chunk) -> res.write(chunk, 'binary')
-                stream.on 'end', -> res.end()
-            else
-                res.end()
+                else
+                    res.writeHead(200, {
+                        'Content-Length': image['_attachments'][size].length,
+                        'Content-Type': 'image/jpeg'})
+                    if 'GET' == method
+                        stream = db.getStreamingAttachment id, size
+                        stream.on 'data', (chunk) -> res.write(chunk, 'binary')
+                        stream.on 'end', -> res.end()
+                    else
+                        res.end()
 
 app.get '/:album/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, 'original', req.params.id, res)
 app.get '/:album/:size/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
