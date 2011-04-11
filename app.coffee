@@ -61,46 +61,46 @@ hash_for = (name, rev) ->
     hash.update String(rev)
     hash.digest 'hex'
 
-app.put '/:album', (req, res) ->
-    db.getDoc req.params.album, (err, doc) ->
+saveAlbum = (name, hash, obj, callback) ->
+    db.getDoc name, (err, doc) ->
         if err && 'not_found' != err.error
-            res.send "{\"error\" : \"unknown\"}\n", 500
-        else if !err && req.query.hash != doc.hash
-            res.send "{\"error\" : \"conflict\"}\n", 409
+            callback(error: 'unknown')
+        else if !err && hash != doc.hash
+            callback(error: 'conflict')
         else
-            if req.body
+            if obj
                 album = {}
-                for own sizeId, size of req.body
+                for own sizeId, size of obj
                     album[sizeId] = size unless reservedSizes.indexOf(sizeId) != -1
             else
                 album = {thumb : {max_height : 120, max_width: 120}}
 
             album.rev = if doc? then doc.rev + 1 else 1
-            album.hash = hash_for req.params.album, album.rev
+            album.hash = hash_for name, album.rev
             album['_rev'] = doc['_rev'] if doc?
 
-            db.saveDoc req.params.album, album, (err, ok) ->
-                res.send(JSON.stringify(ok: true, hash: album.hash) + "\n", 201)
+            db.saveDoc name, album, (err, ok) ->
+                callback(ok: true, hash: album.hash)
 
-app.post '/:album', (req, res) ->
-    imgData = new AutoBuffer parseInt(req.headers['content-length'])
+saveImage = (albumName, input, callback) ->
+    imgData = new AutoBuffer 1024 * 256
     identify = im.identify (err, metadata) ->
-        metadata.album = req.params.album
+        metadata.album = albumName
         db.saveDoc metadata, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, (imgClean) ->
                 db.saveBufferedAttachment imgClean,
                     doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'},
                     (err) ->
-                        db.getDoc req.params.album, (err, album) ->
+                        db.getDoc albumName, (err, album) ->
                             for own k, v of album
                                 (saveResized(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
-            res.send JSON.stringify({ok: true, id: doc.id}) + "\n", 201
+            callback(doc.id)
 
-    req.setEncoding 'binary'
-    req.on 'data', (chunk) ->
+    input.setEncoding 'binary'
+    input.on 'data', (chunk) ->
         imgData.write(chunk, 'binary')
         identify.stdin.write(chunk, 'binary')
-    req.on 'end', -> identify.stdin.end()
+    input.on 'end', -> identify.stdin.end()
 
 retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, image) ->
@@ -126,9 +126,25 @@ retrieve = (method, album, size, id, res) ->
                     else
                         res.end()
 
-app.get '/:album', (req, res) ->
-    db.getDoc req.params.album, (err, album) ->
+getAlbum = (name, callback) ->
+    db.getDoc name, (err, album) ->
         delete(album[prop]) for prop in internals
+        callback(album)
+
+error_codes =
+    undefined: 201
+    'conflict': 409
+    'unknown': 500
+
+app.put '/:album', (req, res) ->
+    saveAlbum req.params.album, req.query.hash, req.body, (result) ->
+        res.send(JSON.stringify(result) + "\n", error_codes[result.error])
+
+app.post '/:album', (req, res) ->
+    saveImage req.params.album, req, (id) -> res.send JSON.stringify({ok: true, id: id}) + "\n", 201
+
+app.get '/:album', (req, res) ->
+    getAlbum req.params.album, (album) ->
         res.writeHead(200, {'Content-Type': 'application/json'})
         res.end(JSON.stringify(album) + "\n")
 
