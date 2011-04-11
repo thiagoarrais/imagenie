@@ -13,7 +13,8 @@ AutoBuffer = require './autobuffer'
 app = express.createServer()
 app.use(express.bodyDecoder())
 
-nonSizes = ['_id', '_rev', 'rev', 'hash']
+internals = ['_id', '_rev']
+nonSizes = internals + ['rev', 'hash']
 reservedSizes = nonSizes + ['original']
 
 resize = (imgSource, width, height, callback) ->
@@ -124,6 +125,12 @@ retrieve = (method, album, size, id, res) ->
                         stream.on 'end', -> res.end()
                     else
                         res.end()
+
+app.get '/:album', (req, res) ->
+    db.getDoc req.params.album, (err, album) ->
+        delete(album[prop]) for prop in internals
+        res.writeHead(200, {'Content-Type': 'application/json'})
+        res.end(JSON.stringify(album) + "\n")
 
 app.get '/:album/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, 'original', req.params.id, res)
 app.get '/:album/:size/:id.jpg', (req, res) -> retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
