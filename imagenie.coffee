@@ -43,7 +43,7 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
         callback(imgResized) if callback?
         retry id, name, imgResized
 
-cacheSize = (id, name, size, image, response) ->
+cacheSize = (id, name, size, image, method, response) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
     stream = db.getStreamingAttachment id, 'original'
     stream.on 'data', (chunk) -> imgOriginal.write(chunk, 'binary')
@@ -51,7 +51,10 @@ cacheSize = (id, name, size, image, response) ->
         response.writeHead(200, {
             'Content-Length': imgResized.length,
             'Content-Type': 'image/jpeg'})
-        response.end(imgResized)
+        if 'GET' == method
+            response.end(imgResized)
+        else
+            response.end()
     )
 
 hash_for = (name, rev) ->
@@ -113,7 +116,7 @@ module.exports.retrieve = (method, album, size, id, res) ->
                 else if 'original' != size &&
                     (   !(cached = image.cache[size]) || !image['_attachments'][size] ||
                         cached.height != album[size].max_height || cached.width != album[size].max_width)
-                            cacheSize id, size, album[size], image, res
+                            cacheSize id, size, album[size], image, method, res
                 else
                     res.writeHead(200, {
                         'Content-Length': image['_attachments'][size].length,
