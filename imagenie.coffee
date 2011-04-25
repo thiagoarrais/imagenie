@@ -21,9 +21,11 @@ resize = (imgSource, width, height, callback) ->
 
 saveResized = (imgSource, origSize, name, size, id, callback) ->
     if origSize.width / origSize.height * size.max_height > size.max_width
-        dstHeight = dstWidth = size.max_width
+        dstWidth = size.max_width
+        dstHeight = Math.floor(origSize.height * origSize.width / size.max_width)
     else
-        dstWidth = dstHeight = size.max_height
+        dstHeight = size.max_height
+        dstWidth = Math.floor(origSize.width * origSize.height / size.max_height)
     resize imgSource, dstWidth, dstHeight, (imgResized) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
