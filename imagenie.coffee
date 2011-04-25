@@ -27,21 +27,22 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
         dstHeight = size.max_height
         dstWidth = Math.floor(origSize.width * origSize.height / size.max_height)
     resize imgSource, dstWidth, dstHeight, (imgResized) ->
-        retry = (id, name, imgData) ->
+        saveAttachment = (id, name, rev, imgData) ->
+            db.saveBufferedAttachment imgData,
+                id, {rev: rev, contentType: 'image/jpeg', name: name},
+                (err) -> if err && 'conflict' == err.error
+                    db.getDoc id, (err, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
+        updateImage = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 doc.cache ||= {}
                 doc.cache[name] = {width: size.max_width, height: size.max_height}
                 db.saveDoc id, doc, (err, status) ->
                     if err
-                        retry(id, name, imgData) if err.error == 'conflict'
+                        updateImage(id, name, imgData) if err.error == 'conflict'
                     else
-                        db.saveBufferedAttachment imgData,
-                            id, {rev: status['rev'], contentType: 'image/jpeg', name: name},
-                            (err) ->
-                                if err
-                                    retry(id, name, imgData) if err.error == 'conflict'
+                        saveAttachment(id, name, status.rev, imgData)
         callback(imgResized) if callback?
-        retry id, name, imgResized
+        updateImage id, name, imgResized
 
 cacheSize = (id, name, size, image, method, response) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
