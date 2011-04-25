@@ -28,7 +28,7 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 doc.cache ||= {}
-                doc.cache[name] = {width: dstWidth, height: dstHeight}
+                doc.cache[name] = {width: size.max_width, height: size.max_height}
                 db.saveDoc id, doc, (err, status) ->
                     if err
                         retry(id, name, imgData) if err.error == 'conflict'
@@ -110,7 +110,7 @@ module.exports.retrieve = (method, album, size, id, res) ->
                     res.send 404
                 else if 'original' != size &&
                     (   !(cached = image.cache[size]) || !image['_attachments'][size] ||
-                        cached.height != album[size].max_height && cached.width != album[size].max_width)
+                        cached.height != album[size].max_height || cached.width != album[size].max_width)
                             cacheSize id, size, album[size], image, res
                 else
                     res.writeHead(200, {
