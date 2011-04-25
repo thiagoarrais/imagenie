@@ -109,8 +109,8 @@ module.exports.retrieve = (method, album, size, id, res) ->
                     console.log 'album does not have this size (' + size + ')?'
                     res.send 404
                 else if 'original' != size &&
-                    (   !(cached = image.cache[size]) ||
-                        cached.height != album[size].height && cached.width != album[size].width)
+                    (   !(cached = image.cache[size]) || !image['_attachments'][size] ||
+                        cached.height != album[size].max_height && cached.width != album[size].max_width)
                             cacheSize id, size, album[size], image, res
                 else
                     res.writeHead(200, {
