@@ -27,16 +27,17 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
     resize imgSource, dstWidth, dstHeight, (imgResized) ->
         retry = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
-                db.saveBufferedAttachment imgData,
-                    id, {rev: doc['_rev'], contentType: 'image/jpeg', name: name},
-                    (err, att) ->
-                        if !err
-                            doc.cache ||= {}
-                            doc.cache[name] = {width: dstWidth, height: dstHeight}
-                            doc['_rev'] = att.rev
-                            db.saveDoc id, doc
-                        else
-                            retry(id, name, imgData) if err.error == 'conflict'
+                doc.cache ||= {}
+                doc.cache[name] = {width: dstWidth, height: dstHeight}
+                db.saveDoc id, doc, (err, status) ->
+                    if err
+                        retry(id, name, imgData) if err.error == 'conflict'
+                    else
+                        db.saveBufferedAttachment imgData,
+                            id, {rev: status['rev'], contentType: 'image/jpeg', name: name},
+                            (err) ->
+                                if err
+                                    retry(id, name, imgData) if err.error == 'conflict'
         callback(imgResized) if callback?
         retry id, name, imgResized
 
