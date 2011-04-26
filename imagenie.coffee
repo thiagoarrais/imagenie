@@ -19,14 +19,17 @@ resize = (imgSource, width, height, callback) ->
     stream.on 'data', imgResized.write.bind(imgResized)
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
-saveResized = (imgSource, origSize, name, size, id, callback) ->
-    if origSize.width / origSize.height * size.max_height > size.max_width
-        dstWidth = size.max_width
-        dstHeight = Math.floor(origSize.height * origSize.width / size.max_width)
+calculateTargetSize = (orig, max) ->
+    if orig.width / orig.height * max.max_height > max.max_width
+        width : max.max_width
+        height : Math.floor(orig.height * orig.width / max.max_width)
     else
-        dstHeight = size.max_height
-        dstWidth = Math.floor(origSize.width * origSize.height / size.max_height)
-    resize imgSource, dstWidth, dstHeight, (imgResized) ->
+        height : max.max_height
+        width : Math.floor(orig.width * orig.height / max.max_height)
+
+saveResized = (imgSource, origSize, name, size, id, callback) ->
+    dstDimensions = calculateTargetSize(origSize, size)
+    resize imgSource, dstDimensions.width, dstDimensions.height, (imgResized) ->
         saveAttachment = (id, name, rev, imgData) ->
             db.saveBufferedAttachment imgData,
                 id, {rev: rev, contentType: 'image/jpeg', name: name},
