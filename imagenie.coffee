@@ -38,7 +38,9 @@ saveResized = (imgSource, origSize, name, size, id, callback) ->
         updateImage = (id, name, imgData) ->
             db.getDoc id, (err, doc) ->
                 doc.cache ||= {}
-                doc.cache[name] = {width: size.max_width, height: size.max_height}
+                doc.cache[name] =
+                    max_width: size.max_width, max_height: size.max_height
+                    width: dstDimensions.width, height: dstDimensions.height
                 db.saveDoc id, doc, (err, status) ->
                     if err
                         updateImage(id, name, imgData) if err.error == 'conflict'
@@ -118,9 +120,13 @@ module.exports.retrieve = (method, album, size, id, res) ->
                     console.log 'album does not have this size (' + size + ')?'
                     res.send 404
                 else if 'original' != size &&
-                    (   !(cached = image.cache[size]) || !image['_attachments'][size] ||
-                        cached.height != album[size].max_height || cached.width != album[size].max_width)
-                            cacheSize id, size, album[size], image, method, res
+                    (   !(cached = image.cache[size]) ||
+                        !image['_attachments'][size] ||
+                            (   cached.max_height != album[size].max_height ||
+                                cached.max_width != album[size].max_width) &&
+                            (   (target = calculateTargetSize(image, album[size])).height != cached.height ||
+                                target.width != cached.width))
+                    cacheSize id, size, album[size], image, method, res
                 else
                     res.writeHead(200, {
                         'Content-Length': image['_attachments'][size].length,
