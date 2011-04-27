@@ -22,11 +22,7 @@ app.put '/:album', (req, res) ->
 app.post '/:album', (req, res) ->
     imagenie.saveImage req.params.album, req, (id) -> res.send JSON.stringify({ok: true, id: id}) + "\n", 201
 
-app.get '/:album', (req, res) ->
-    imagenie.getAlbum req.params.album, (album) ->
-        res.writeHead(200, {'Content-Type': 'application/json'})
-        res.end(JSON.stringify(album) + "\n")
-
+app.get '/:album', (req, res) -> imagenie.getAlbum req.params.album, res
 app.get '/:album/:id.jpg', (req, res) ->
     imagenie.retrieve(req.method, req.params.album, 'original', req.params.id, res)
 app.get '/:album/:size/:id.jpg', (req, res) ->
