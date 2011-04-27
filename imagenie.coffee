@@ -22,10 +22,10 @@ resize = (imgSource, width, height, callback) ->
 calculateTargetSize = (orig, max) ->
     if orig.width / orig.height * max.max_height > max.max_width
         width : max.max_width
-        height : Math.floor(orig.height * orig.width / max.max_width)
+        height : 0
     else
         height : max.max_height
-        width : Math.floor(orig.width * orig.height / max.max_height)
+        width : 0
 
 saveResized = (imgSource, origSize, name, size, id, callback) ->
     dstDimensions = calculateTargetSize(origSize, size)
