@@ -140,6 +140,9 @@ module.exports.retrieve = (method, album, size, id, res) ->
 
 module.exports.getAlbum = (name, res) ->
     db.getDoc name, (err, album) ->
-        delete(album[prop]) for prop in internals
-        res.writeHead(200, {'Content-Type': 'application/json'})
-        res.end(JSON.stringify(album) + "\n")
+        if err
+            res.send 404
+        else
+            delete(album[prop]) for prop in internals
+            res.writeHead(200, {'Content-Type': 'application/json'})
+            res.end(JSON.stringify(album) + "\n")
