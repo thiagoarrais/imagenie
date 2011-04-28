@@ -8,7 +8,7 @@ express = require 'express'
 imagenie = require './imagenie'
 
 app = express.createServer()
-app.use(express.bodyDecoder())
+app.use(express.bodyParser())
 
 error_codes =
     undefined: 201
