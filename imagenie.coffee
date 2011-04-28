@@ -20,7 +20,7 @@ resize = (imgSource, width, height, callback) ->
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
 calculateTargetSize = (orig, max) ->
-    if orig.width / orig.height * max.max_height > max.max_width
+    if orig.width / orig.height * max.max_height >= max.max_width
         width : max.max_width
         height : 0
     else
