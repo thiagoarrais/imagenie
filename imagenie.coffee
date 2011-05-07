@@ -13,9 +13,9 @@ internals = ['_id', '_rev']
 nonSizes = internals + ['rev', 'hash']
 reservedSizes = nonSizes + ['original']
 
-resize = (imgSource, width, height, callback) ->
+resize = (imgSource, width, height, quality, callback) ->
     imgResized = new AutoBuffer(imgSource.length)
-    stream = im.resize {srcData: imgSource, quality: 0.96, width: width, height: height}
+    stream = im.resize {srcData: imgSource, quality: quality, width: width, height: height}
     stream.on 'data', imgResized.write.bind(imgResized)
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
@@ -27,9 +27,9 @@ calculateTargetSize = (orig, max) ->
         height : max.max_height
         width : 0
 
-saveResized = (imgSource, origSize, name, size, id, callback) ->
-    dstDimensions = calculateTargetSize(origSize, size)
-    resize imgSource, dstDimensions.width, dstDimensions.height, (imgResized) ->
+saveResized = (imgSource, origInfo, name, size, id, callback) ->
+    dstDimensions = calculateTargetSize(origInfo, size)
+    resize imgSource, dstDimensions.width, dstDimensions.height, origInfo.quality, (imgResized) ->
         saveAttachment = (id, name, rev, imgData) ->
             db.saveBufferedAttachment imgData,
                 id, {rev: rev, contentType: 'image/jpeg', name: name},
@@ -93,15 +93,19 @@ module.exports.saveAlbum = (name, hash, obj, callback) ->
 module.exports.saveImage = (albumName, input, callback) ->
     imgData = new AutoBuffer 1024 * 256
     identify = im.identify (err, metadata) ->
-        metadata.album = albumName
-        db.saveDoc metadata, (err, doc) ->
-            resize imgData.content(), metadata.width, metadata.height, (imgClean) ->
+        imgDoc =
+          album: albumName
+          width: metadata.width
+          height: metadata.height
+          quality: metadata.quality
+        db.saveDoc imgDoc, (err, doc) ->
+            resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
                 db.saveBufferedAttachment imgClean,
                     doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'},
                     (err) ->
                         db.getDoc albumName, (err, album) ->
                             for own k, v of album
-                                (saveResized(imgClean, metadata, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
+                                (saveResized(imgClean, imgDoc, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
             callback(doc.id)
 
     input.setEncoding 'binary'
