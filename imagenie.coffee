@@ -6,6 +6,7 @@ imagenie: an image hosting service
 db = require('couchdb').createClient(5984, 'localhost').db('images')
 im = require 'imagemagick'
 crypto = require 'crypto'
+Orchestra = require 'orchestra'
 
 AutoBuffer = require './autobuffer'
 
@@ -69,6 +70,16 @@ hash_for = (name, rev) ->
     hash.update String(rev)
     hash.digest 'hex'
 
+generateId = (callback) ->
+    id = []
+    id.push((Math.random() * 0x100000000).toString(16)) for i in [1..4]
+    id = id.join('')
+    db.getDoc id, (err) ->
+        if err && 'not_found' == err.error
+            callback(null, id)
+        else
+            generateId(callback)
+
 module.exports.saveAlbum = (name, hash, obj, callback) ->
     db.getDoc name, (err, doc) ->
         if err && 'not_found' != err.error
@@ -92,13 +103,20 @@ module.exports.saveAlbum = (name, hash, obj, callback) ->
 
 module.exports.saveImage = (albumName, input, callback) ->
     imgData = new AutoBuffer 1024 * 256
-    identify = im.identify (err, metadata) ->
+
+    orch = new Orchestra()
+    generateId orch.emitter('id')
+    identify = im.identify orch.emitter('im')
+
+    orch.on 'id', (data) -> callback(data.id[0][1])
+    orch.on 'id,im', (data) ->
+        metadata = data.im[0][1]
         imgDoc =
           album: albumName
           width: metadata.width
           height: metadata.height
           quality: metadata.quality
-        db.saveDoc imgDoc, (err, doc) ->
+        db.saveDoc data.id[0][1], imgDoc, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
                 db.saveBufferedAttachment imgClean,
                     doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'},
@@ -106,7 +124,6 @@ module.exports.saveImage = (albumName, input, callback) ->
                         db.getDoc albumName, (err, album) ->
                             for own k, v of album
                                 (saveResized(imgClean, imgDoc, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
-            callback(doc.id)
 
     input.setEncoding 'binary'
     input.on 'data', (chunk) ->
