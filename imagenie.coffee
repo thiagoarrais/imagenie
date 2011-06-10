@@ -116,6 +116,7 @@ module.exports.saveImage = (albumName, input, callback) ->
           width: metadata.width
           height: metadata.height
           quality: metadata.quality
+          cache: {}
         db.saveDoc data.id[0][1], imgDoc, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
                 db.saveBufferedAttachment imgClean,
@@ -139,6 +140,8 @@ module.exports.retrieve = (method, album, size, id, res) ->
             db.getDoc album, (err, album) ->
                 if err || 'original' != size && !album[size]
                     console.log 'album does not have this size (' + size + ')?'
+                    res.send 404
+                else if !image['_attachments']
                     res.send 404
                 else if 'original' != size &&
                     (   !(cached = image.cache[size]) ||
