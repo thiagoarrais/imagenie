@@ -134,14 +134,12 @@ module.exports.saveImage = (albumName, input, callback) ->
 
 module.exports.retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, image) ->
-        if err || album != image.album
+        if err || album != image.album || !image['_attachments']
             res.send 404
         else
             db.getDoc album, (err, album) ->
                 if err || 'original' != size && !album[size]
                     console.log 'album does not have this size (' + size + ')?'
-                    res.send 404
-                else if !image['_attachments']
                     res.send 404
                 else if 'original' != size &&
                     (   !(cached = image.cache[size]) ||
