@@ -116,8 +116,8 @@ module.exports.saveImage = (albumName, input, callback) ->
           width: metadata.width
           height: metadata.height
           quality: metadata.quality
-          datetime: metadata.properties && metadata.properties['exif:datetime']
-          model: metadata.properties && metadata.properties['exif:model']
+          datetime: metadata.Properties && metadata.Properties['exif:DateTime']
+          model: metadata.Properties && metadata.Properties['exif:Model']
           cache: {}
         db.saveDoc data.id[0][1], imgDoc, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
