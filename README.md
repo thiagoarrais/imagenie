@@ -22,6 +22,8 @@ Warning: before starting, go get some kitten JPEGs
     curl -o /tmp/kitten.jpg http://localhost:8000/kittens/2280dd0d2ecd3ebf091bea9d7d005d49.jpg
     # get the thumbnail
     curl -o /tmp/kitten-thumb.jpg http://localhost:8000/kittens/thumb/2280dd0d2ecd3ebf091bea9d7d005d49.jpg
+    # get some image metadata in JSON format
+    curl http://localhost:8000/kittens/2280dd0d2ecd3ebf091bea9d7d005d49.json
 
 'thumb' is an arbitrary size identifier, you can specify as many as you want
 like profile, reduced, email, etc.
