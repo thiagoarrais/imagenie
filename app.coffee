@@ -25,6 +25,10 @@ app.post '/:album', (req, res) ->
 app.get '/:album', (req, res) -> imagenie.getAlbum req.params.album, res
 app.get '/:album/:id.jpg', (req, res) ->
     imagenie.retrieve(req.method, req.params.album, 'original', req.params.id, res)
+app.get '/:album/:id.json', (req, res) ->
+    imagenie.info(req.method, req.params.album, req.params.id, res)
+app.get '/:album/:id', (req, res) ->
+    imagenie.info(req.method, req.params.album, req.params.id, res)
 app.get '/:album/:size/:id.jpg', (req, res) ->
     imagenie.retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
 

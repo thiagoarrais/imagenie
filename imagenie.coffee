@@ -116,6 +116,8 @@ module.exports.saveImage = (albumName, input, callback) ->
           width: metadata.width
           height: metadata.height
           quality: metadata.quality
+          datetime: metadata.properties && metadata.properties['exif:datetime']
+          model: metadata.properties && metadata.properties['exif:model']
           cache: {}
         db.saveDoc data.id[0][1], imgDoc, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
@@ -159,6 +161,23 @@ module.exports.retrieve = (method, album, size, id, res) ->
                         stream.on 'end', -> res.end()
                     else
                         res.end()
+
+module.exports.info = (method, album, id, res) ->
+    db.getDoc id, (err, image) ->
+        if err || album != image.album
+            res.send 404
+        else
+            result = JSON.stringify(
+                width: image.width
+                height: image.height
+                datetime: image.datetime
+                model: image.model)
+            res.writeHead(200, {
+                'Content-Length': result.length,
+                'Content-Type': 'application/json'})
+            if 'GET' == method
+                res.write(result)
+            res.end()
 
 module.exports.getAlbum = (name, res) ->
     db.getDoc name, (err, album) ->
