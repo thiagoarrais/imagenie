@@ -9,6 +9,7 @@ crypto = require 'crypto'
 Orchestra = require 'orchestra'
 
 AutoBuffer = require './autobuffer'
+calculateTargetSize = require './target'
 
 internals = ['_id', '_rev']
 nonSizes = internals + ['rev', 'hash']
@@ -19,14 +20,6 @@ resize = (imgSource, width, height, quality, callback) ->
     stream = im.resize {srcData: imgSource, quality: quality, width: width, height: height, strip: false}
     stream.on 'data', imgResized.write.bind(imgResized)
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
-
-calculateTargetSize = (orig, max) ->
-    if orig.width / orig.height * max.max_height >= max.max_width
-        width : max.max_width
-        height : 0
-    else
-        height : max.max_height
-        width : 0
 
 saveResized = (imgSource, origInfo, name, size, id, callback) ->
     dstDimensions = calculateTargetSize(origInfo, size)
