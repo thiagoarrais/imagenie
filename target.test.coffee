@@ -27,3 +27,11 @@ module.exports =
     dim = target({width: 800, height: 600}, {max_width: 640, max_height: 480})
     assert.equal(dim.width, 640);
     assert.equal(dim.height, 0);
+  'fixed width': ->
+    dim = target({width: 800, height: 600}, {width: 588})
+    assert.equal(dim.width, 588);
+    assert.equal(dim.height, 0);
+  'fixed height': ->
+    dim = target({width: 800, height: 600}, {height: 372})
+    assert.equal(dim.width, 0);
+    assert.equal(dim.height, 372);
