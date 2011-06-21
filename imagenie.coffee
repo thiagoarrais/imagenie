@@ -100,8 +100,9 @@ module.exports.saveImage = (albumName, input, callback) ->
     orch = new Orchestra()
     generateId orch.emitter('id')
     identify = im.identify orch.emitter('im')
+    input.on 'end', orch.emitter('end')
 
-    orch.on 'id', (data) -> callback(data.id[0][1])
+    orch.on 'id,end', (data) -> callback(data.id[0][1])
     orch.on 'id,im', (data) ->
         metadata = data.im[0][1]
         imgDoc =
@@ -125,7 +126,7 @@ module.exports.saveImage = (albumName, input, callback) ->
     input.on 'data', (chunk) ->
         imgData.write(chunk, 'binary')
         identify.stdin.write(chunk, 'binary')
-    input.on 'end', -> identify.stdin.end()
+    orch.on 'end', -> identify.stdin.end()
 
 module.exports.retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, image) ->
