@@ -17,7 +17,11 @@ reservedSizes = nonSizes + ['original']
 
 resize = (imgSource, width, height, quality, callback) ->
     imgResized = new AutoBuffer(imgSource.length)
-    stream = im.resize {srcData: imgSource, quality: quality, width: width, height: height, strip: false}
+    opts = {srcData: imgSource, quality: quality, width: width, height: height, strip: false}
+    stream = if 0 == width || 0 == height
+        im.resize opts
+    else
+        im.crop opts
     stream.on 'data', imgResized.write.bind(imgResized)
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
