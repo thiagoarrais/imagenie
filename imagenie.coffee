@@ -132,6 +132,8 @@ module.exports.saveImage = (albumName, input, callback) ->
         identify.stdin.write(chunk, 'binary')
     orch.on 'end', -> identify.stdin.end()
 
+geometryEquals = (a, b) -> a.width == b.width && a.height == b.height
+
 module.exports.retrieve = (method, album, size, id, res) ->
     db.getDoc id, (err, image) ->
         if err || album != image.album || !image['_attachments']
@@ -144,10 +146,7 @@ module.exports.retrieve = (method, album, size, id, res) ->
                 else if 'original' != size &&
                     (   !(cached = image.cache[size]) ||
                         !image['_attachments'][size] ||
-                            (   cached.max_height != album[size].max_height ||
-                                cached.max_width != album[size].max_width) &&
-                            (   (target = calculateTargetSize(image, album[size])).height != cached.height ||
-                                target.width != cached.width))
+                        !geometryEquals(cached, calculateTargetSize(image, album[size])))
                     cacheSize id, size, album[size], image, method, res
                 else
                     res.writeHead(200, {
