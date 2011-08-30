@@ -3,7 +3,7 @@
 imagenie: an image hosting service
 ###
 
-db = require('couchdb').createClient(5984, 'localhost').db('images')
+db = require('nano')('http://localhost:5984').use('images')
 im = require 'imagemagick'
 crypto = require 'crypto'
 Orchestra = require 'orchestra'
@@ -29,17 +29,16 @@ saveResized = (imgSource, origInfo, name, size, id, callback) ->
     dstDimensions = calculateTargetSize(origInfo, size)
     resize imgSource, dstDimensions.width, dstDimensions.height, origInfo.quality, (imgResized) ->
         saveAttachment = (id, name, rev, imgData) ->
-            db.saveBufferedAttachment imgData,
-                id, {rev: rev, contentType: 'image/jpeg', name: name},
+            db.attachment.insert id, name, imgData, 'image/jpeg', {rev: rev},
                 (err) -> if err && 'conflict' == err.error
-                    db.getDoc id, (err, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
+                    db.get id, (_, _, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
         updateImage = (id, name, imgData) ->
-            db.getDoc id, (err, doc) ->
+            db.get id, (_, _, doc) ->
                 doc.cache ||= {}
                 doc.cache[name] =
                     max_width: size.max_width, max_height: size.max_height
                     width: dstDimensions.width, height: dstDimensions.height
-                db.saveDoc id, doc, (err, status) ->
+                db.insert doc, id, (err, _, status) ->
                     if err
                         updateImage(id, name, imgData) if err.error == 'conflict'
                     else
@@ -49,8 +48,8 @@ saveResized = (imgSource, origInfo, name, size, id, callback) ->
 
 cacheSize = (id, name, size, image, method, response) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
-    stream = db.getStreamingAttachment id, 'original'
-    stream.on 'data', (chunk) -> imgOriginal.write(chunk, 'binary')
+    stream = db.attachment.get id, 'original'
+    stream.on 'data', (chunk) -> imgOriginal.write(chunk)
     stream.on 'end', -> saveResized(imgOriginal.content(), image, name, size, id, (imgResized) ->
         response.writeHead(200, {
             'Content-Length': imgResized.length,
@@ -71,14 +70,14 @@ generateId = (callback) ->
     id = []
     id.push((Math.random() * 0x100000000).toString(16)) for i in [1..4]
     id = id.join('')
-    db.getDoc id, (err) ->
+    db.get id, (err) ->
         if err && 'not_found' == err.error
             callback(null, id)
         else
             generateId(callback)
 
 module.exports.saveAlbum = (name, hash, obj, callback) ->
-    db.getDoc name, (err, doc) ->
+    db.get name, (err, _, doc) ->
         if err && 'not_found' != err.error
             callback(error: 'unknown')
         else if !err && hash != doc.hash
@@ -91,11 +90,11 @@ module.exports.saveAlbum = (name, hash, obj, callback) ->
             else
                 album = {thumb : {max_height : 120, max_width: 120}}
 
-            album.rev = if doc? then doc.rev + 1 else 1
+            album.rev = if err && 'not_found' == err.error then 1 else doc.rev + 1
             album.hash = hash_for name, album.rev
             album['_rev'] = doc['_rev'] if doc?
 
-            db.saveDoc name, album, (err, ok) ->
+            db.insert album, name, (err) ->
                 callback(ok: true, hash: album.hash)
 
 module.exports.saveImage = (albumName, input, callback) ->
@@ -117,12 +116,11 @@ module.exports.saveImage = (albumName, input, callback) ->
           datetime: metadata.Properties && metadata.Properties['exif:DateTime']
           model: metadata.Properties && metadata.Properties['exif:Model']
           cache: {}
-        db.saveDoc data.id[0][1], imgDoc, (err, doc) ->
+        db.insert imgDoc, data.id[0][1], (err, _, doc) ->
             resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
-                db.saveBufferedAttachment imgClean,
-                    doc.id, {rev: doc.rev, contentType: 'image/jpeg', name: 'original'},
+                db.attachment.insert doc.id, 'original', imgClean, 'image/jpeg', {rev: doc.rev},
                     (err) ->
-                        db.getDoc albumName, (err, album) ->
+                        db.get albumName, (err, _, album) ->
                             for own k, v of album
                                 (saveResized(imgClean, imgDoc, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
 
@@ -135,11 +133,11 @@ module.exports.saveImage = (albumName, input, callback) ->
 geometryEquals = (a, b) -> a.width == b.width && a.height == b.height
 
 module.exports.retrieve = (method, album, size, id, res) ->
-    db.getDoc id, (err, image) ->
+    db.get id, (err, _, image) ->
         if err || album != image.album || !image['_attachments']
             res.send 404
         else
-            db.getDoc album, (err, album) ->
+            db.get album, (err, _, album) ->
                 if err || 'original' != size && !album[size]
                     console.log 'album does not have this size (' + size + ')?'
                     res.send 404
@@ -153,14 +151,14 @@ module.exports.retrieve = (method, album, size, id, res) ->
                         'Content-Length': image['_attachments'][size].length,
                         'Content-Type': 'image/jpeg'})
                     if 'GET' == method
-                        stream = db.getStreamingAttachment id, size
+                        stream = db.attachment.get id, size
                         stream.on 'data', (chunk) -> res.write(chunk, 'binary')
                         stream.on 'end', -> res.end()
                     else
                         res.end()
 
 module.exports.info = (method, album, id, res) ->
-    db.getDoc id, (err, image) ->
+    db.get id, (err, _, image) ->
         if err || album != image.album
             res.send 404
         else
@@ -177,7 +175,7 @@ module.exports.info = (method, album, id, res) ->
             res.end()
 
 module.exports.getAlbum = (name, res) ->
-    db.getDoc name, (err, album) ->
+    db.get name, (err, _, album) ->
         if err
             res.send 404
         else

@@ -20,7 +20,10 @@ AutoBuffer.prototype.write = (data, encoding) ->
         this.capacity *= 2
         this.buffer = new Buffer(this.capacity)
         old.copy(this.buffer, 0, 0, this.length)
-    this.buffer.write(data, this.length, encoding)
+    if Buffer.isBuffer(data)
+        data.copy(this.buffer, this.length)
+    else
+        this.buffer.write(data, this.length, encoding)
     this.length += data.length
 
 module.exports = AutoBuffer

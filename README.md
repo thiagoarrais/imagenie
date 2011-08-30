@@ -36,7 +36,7 @@ Technologies used in this project (in no particular order)
 * [Express.js](http://expressjs.com/)
 * [CoffeeScript](http://coffeescript.org/)
 * [Imagemagick](http://www.imagemagick.org/) and [node-imagemagick](https://github.com/rsms/node-imagemagick) for node integration
-* [CouchDB](http://couchdb.apache.org/) and [node-couchdb](https://github.com/felixge/node-couchdb) for node integration
+* [CouchDB](http://couchdb.apache.org/) and [nanocouch](https://github.com/dscape/nano) for node integration
 
 License
 -------
