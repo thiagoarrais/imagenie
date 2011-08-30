@@ -22,7 +22,7 @@ resize = (imgSource, width, height, quality, callback) ->
         im.resize opts
     else
         im.crop opts
-    stream.on 'data', imgResized.write.bind(imgResized)
+    stream.on 'data', (chunk) -> imgResized.write(chunk, 'binary')
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
 saveResized = (imgSource, origInfo, name, size, id, callback) ->
@@ -129,8 +129,8 @@ module.exports.saveImage = (albumName, input, callback) ->
     input.setEncoding 'binary'
     input.on 'data', (chunk) ->
         imgData.write(chunk, 'binary')
-        identify.stdin.write(chunk, 'binary')
-    orch.on 'end', -> identify.stdin.end()
+        identify.write(chunk, 'binary')
+    orch.on 'end', -> identify.end()
 
 geometryEquals = (a, b) -> a.width == b.width && a.height == b.height
 
