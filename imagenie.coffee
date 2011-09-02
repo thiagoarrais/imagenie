@@ -31,14 +31,14 @@ saveResized = (imgSource, origInfo, name, size, id, callback) ->
         saveAttachment = (id, name, rev, imgData) ->
             db.attachment.insert id, name, imgData, 'image/jpeg', {rev: rev},
                 (err) -> if err && 'conflict' == err.error
-                    db.get id, (_, _, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
+                    db.get id, (_, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
         updateImage = (id, name, imgData) ->
-            db.get id, (_, _, doc) ->
+            db.get id, (_, doc) ->
                 doc.cache ||= {}
                 doc.cache[name] =
                     max_width: size.max_width, max_height: size.max_height
                     width: dstDimensions.width, height: dstDimensions.height
-                db.insert doc, id, (err, _, status) ->
+                db.insert doc, id, (err, status) ->
                     if err
                         updateImage(id, name, imgData) if err.error == 'conflict'
                     else
@@ -77,7 +77,7 @@ generateId = (callback) ->
             generateId(callback)
 
 module.exports.saveAlbum = (name, hash, obj, callback) ->
-    db.get name, (err, _, doc) ->
+    db.get name, (err, doc) ->
         if err && 'not_found' != err.error
             callback(error: 'unknown')
         else if !err && hash != doc.hash
@@ -116,11 +116,11 @@ module.exports.saveImage = (albumName, input, callback) ->
           datetime: metadata.Properties && metadata.Properties['exif:DateTime']
           model: metadata.Properties && metadata.Properties['exif:Model']
           cache: {}
-        db.insert imgDoc, data.id[0][1], (err, _, doc) ->
+        db.insert imgDoc, data.id[0][1], (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
                 db.attachment.insert doc.id, 'original', imgClean, 'image/jpeg', {rev: doc.rev},
                     (err) ->
-                        db.get albumName, (err, _, album) ->
+                        db.get albumName, (err, album) ->
                             for own k, v of album
                                 (saveResized(imgClean, imgDoc, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
 
@@ -133,11 +133,11 @@ module.exports.saveImage = (albumName, input, callback) ->
 geometryEquals = (a, b) -> a.width == b.width && a.height == b.height
 
 module.exports.retrieve = (method, album, size, id, res) ->
-    db.get id, (err, _, image) ->
+    db.get id, (err, image) ->
         if err || album != image.album || !image['_attachments']
             res.send 404
         else
-            db.get album, (err, _, album) ->
+            db.get album, (err, album) ->
                 if err || 'original' != size && !album[size]
                     console.log 'album does not have this size (' + size + ')?'
                     res.send 404
@@ -158,7 +158,7 @@ module.exports.retrieve = (method, album, size, id, res) ->
                         res.end()
 
 module.exports.info = (method, album, id, res) ->
-    db.get id, (err, _, image) ->
+    db.get id, (err, image) ->
         if err || album != image.album
             res.send 404
         else
@@ -175,7 +175,7 @@ module.exports.info = (method, album, id, res) ->
             res.end()
 
 module.exports.getAlbum = (name, res) ->
-    db.get name, (err, _, album) ->
+    db.get name, (err, album) ->
         if err
             res.send 404
         else
