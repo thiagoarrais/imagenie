@@ -7,16 +7,15 @@ study
 Try this
 --------
 
-Warning: before starting, go get some kitten JPEGs
+Warning: before starting, go get some kitten JPEGs and make sure the CouchDB
+server is listening on localhost:5984
 
-    # create images database in CouchDB
-    curl -X PUT http://localhost:5984/images
     # start app
     coffee images.coffee
     # create an album named 'kittens' with thumbnails 120 pixels tall/wide
     curl -X PUT -H 'Content-Type: application/json' --data '{"thumb" : {"max_height" : 120, "max_width" : 120}}' http://localhost:8000/kittens
     # post a picture to the album
-    curl -i -H 'Content-type: image/jpeg' --data-binary @/path/to/kitten/picture.jpg http://localhost:8000/kittens
+    curl -i -H 'Content-Type: image/jpeg' --data-binary @/path/to/kitten/picture.jpg http://localhost:8000/kittens
     # -> {"ok":true,"id":"2280dd0d2ecd3ebf091bea9d7d005d49"}
     # get your picture back (metadata will be striped out)
     curl -o /tmp/kitten.jpg http://localhost:8000/kittens/2280dd0d2ecd3ebf091bea9d7d005d49.jpg

@@ -3,7 +3,7 @@
 imagenie: an image hosting service
 ###
 
-db = require('nano')('http://localhost:5984').use('images')
+couch = require('nano')('http://localhost:5984')
 im = require 'imagemagick'
 crypto = require 'crypto'
 Orchestra = require 'orchestra'
@@ -28,11 +28,11 @@ resize = (imgSource, width, height, quality, callback) ->
 saveResized = (imgSource, origInfo, name, size, id, callback) ->
     dstDimensions = calculateTargetSize(origInfo, size)
     resize imgSource, dstDimensions.width, dstDimensions.height, origInfo.quality, (imgResized) ->
-        saveAttachment = (id, name, rev, imgData) ->
+        saveAttachment = (id, name, rev, imgData) -> withDB (db) ->
             db.attachment.insert id, name, imgData, 'image/jpeg', {rev: rev},
                 (err) -> if err && 'conflict' == err.error
                     db.get id, (_, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
-        updateImage = (id, name, imgData) ->
+        updateImage = (id, name, imgData) -> withDB (db) ->
             db.get id, (_, doc) ->
                 doc.cache ||= {}
                 doc.cache[name] =
@@ -46,7 +46,7 @@ saveResized = (imgSource, origInfo, name, size, id, callback) ->
         callback(imgResized) if callback?
         updateImage id, name, imgResized
 
-cacheSize = (id, name, size, image, method, response) ->
+cacheSize = (id, name, size, image, method, response) -> withDB (db) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
     stream = db.attachment.get id, 'original'
     stream.on 'data', (chunk) -> imgOriginal.write(chunk)
@@ -66,7 +66,7 @@ hash_for = (name, rev) ->
     hash.update String(rev)
     hash.digest 'hex'
 
-generateId = (callback) ->
+generateId = (callback) -> withDB (db) ->
     id = []
     id.push((Math.random() * 0x100000000).toString(16)) for i in [1..4]
     id = id.join('')
@@ -76,7 +76,7 @@ generateId = (callback) ->
         else
             generateId(callback)
 
-module.exports.saveAlbum = (name, hash, obj, callback) ->
+module.exports.saveAlbum = (name, hash, obj, callback) -> withDB (db) ->
     db.get name, (err, doc) ->
         if err && 'not_found' != err.error
             callback(error: 'unknown')
@@ -106,7 +106,7 @@ module.exports.saveImage = (albumName, input, callback) ->
     input.on 'end', orch.emitter('end')
 
     orch.on 'id,end', (data) -> callback(data.id[0][1])
-    orch.on 'id,im', (data) ->
+    orch.on 'id,im', (data) -> withDB (db) ->
         metadata = data.im[0][1]
         imgDoc =
           album: albumName
@@ -132,7 +132,7 @@ module.exports.saveImage = (albumName, input, callback) ->
 
 geometryEquals = (a, b) -> a.width == b.width && a.height == b.height
 
-module.exports.retrieve = (method, album, size, id, res) ->
+module.exports.retrieve = (method, album, size, id, res) -> withDB (db) ->
     db.get id, (err, image) ->
         if err || album != image.album || !image['_attachments']
             res.send 404
@@ -157,7 +157,7 @@ module.exports.retrieve = (method, album, size, id, res) ->
                     else
                         res.end()
 
-module.exports.info = (method, album, id, res) ->
+module.exports.info = (method, album, id, res) -> withDB (db) ->
     db.get id, (err, image) ->
         if err || album != image.album
             res.send 404
@@ -174,7 +174,7 @@ module.exports.info = (method, album, id, res) ->
                 res.write(result)
             res.end()
 
-module.exports.getAlbum = (name, res) ->
+module.exports.getAlbum = (name, res) -> withDB (db) ->
     db.get name, (err, album) ->
         if err
             res.send 404
@@ -182,3 +182,20 @@ module.exports.getAlbum = (name, res) ->
             delete(album[prop]) for prop in internals
             res.writeHead(200, {'Content-Type': 'application/json'})
             res.end(JSON.stringify(album) + "\n")
+
+withDB = (->
+    db = null
+    (action) ->
+        if !db
+            couch.db.get('images', (err) ->
+                useImages = ->
+                    db = couch.use('images')
+                    action db
+                if err
+                    couch.db.create('images', useImages)
+                else
+                    useImages()
+            )
+        else
+            action db
+    )()
