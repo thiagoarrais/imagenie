@@ -3,13 +3,13 @@
 imagenie: an image hosting service
 ###
 
-couch = require('nano')('http://localhost:5984')
 im = require 'imagemagick'
 crypto = require 'crypto'
 Orchestra = require 'orchestra'
 
 AutoBuffer = require './autobuffer'
 calculateTargetSize = require './target'
+withDB = require './with_db'
 
 internals = ['_id', '_rev']
 nonSizes = internals + ['rev', 'hash']
@@ -183,19 +183,3 @@ module.exports.getAlbum = (name, res) -> withDB (db) ->
             res.writeHead(200, {'Content-Type': 'application/json'})
             res.end(JSON.stringify(album) + "\n")
 
-withDB = (->
-    db = null
-    (action) ->
-        if !db
-            couch.db.get('images', (err) ->
-                useImages = ->
-                    db = couch.use('images')
-                    action db
-                if err
-                    couch.db.create('images', useImages)
-                else
-                    useImages()
-            )
-        else
-            action db
-    )()
