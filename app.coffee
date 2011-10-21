@@ -28,13 +28,13 @@ app.post '/:album', (req, res) ->
         res.end body
 
 app.get '/:album', (req, res) -> imagenie.getAlbum req.params.album, res
-app.get '/:album/:id.jpg', (req, res) ->
-    imagenie.retrieve(req.method, req.params.album, 'original', req.params.id, res)
-app.get '/:album/:id.json', (req, res) ->
-    imagenie.info(req.method, req.params.album, req.params.id, res)
 app.get '/:album/:id', (req, res) ->
-    imagenie.info(req.method, req.params.album, req.params.id, res)
-app.get '/:album/:size/:id.jpg', (req, res) ->
+    if req.header('Accept', '*/*').indexOf('application/json') >= 0
+        imagenie.info(req.method, req.params.album, req.params.id, res)
+    else
+        imagenie.retrieve(req.method, req.params.album, 'original', req.params.id, res)
+
+app.get '/:album/:size/:id', (req, res) ->
     imagenie.retrieve(req.method, req.params.album, req.params.size, req.params.id, res)
 
 app.listen 8000
