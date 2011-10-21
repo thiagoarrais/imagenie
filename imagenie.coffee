@@ -15,9 +15,10 @@ internals = ['_id', '_rev']
 nonSizes = internals + ['rev', 'hash']
 reservedSizes = nonSizes + ['original']
 
-resize = (imgSource, width, height, quality, callback) ->
+resize = (imgSource, width, height, format, quality, callback) ->
     imgResized = new AutoBuffer(imgSource.length)
-    opts = {srcData: imgSource, quality: quality, width: width, height: height, strip: false}
+    opts = {srcData: imgSource, format: format, width: width, height: height, strip: false}
+    opts.quality = quality if quality
     stream = if 0 == width || 0 == height
         im.resize opts
     else
@@ -25,11 +26,11 @@ resize = (imgSource, width, height, quality, callback) ->
     stream.on 'data', (chunk) -> imgResized.write(chunk, 'binary')
     stream.on 'end', (err, stderr) -> callback(imgResized.content())
 
-saveResized = (imgSource, origInfo, name, size, id, callback) ->
+saveResized = (imgSource, origInfo, name, size, mimetype, id, callback) ->
     dstDimensions = calculateTargetSize(origInfo, size)
-    resize imgSource, dstDimensions.width, dstDimensions.height, origInfo.quality, (imgResized) ->
+    resize imgSource, dstDimensions.width, dstDimensions.height, origInfo.format.toLowerCase(), origInfo.quality, (imgResized) ->
         saveAttachment = (id, name, rev, imgData) -> withDB (db) ->
-            db.attachment.insert id, name, imgData, 'image/jpeg', {rev: rev},
+            db.attachment.insert id, name, imgData, mimetype, {rev: rev},
                 (err) -> if err && 'conflict' == err.error
                     db.get id, (_, doc) -> saveAttachment(id, doc['_rev'], name, imgData)
         updateImage = (id, name, imgData) -> withDB (db) ->
@@ -50,10 +51,10 @@ cacheSize = (id, name, size, image, method, response) -> withDB (db) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
     stream = db.attachment.get id, 'original'
     stream.on 'data', (chunk) -> imgOriginal.write(chunk)
-    stream.on 'end', -> saveResized(imgOriginal.content(), image, name, size, id, (imgResized) ->
+    stream.on 'end', -> saveResized(imgOriginal.content(), image, name, size, image['_attachments'][size].content_type, id, (imgResized) ->
         response.writeHead(200, {
             'Content-Length': imgResized.length,
-            'Content-Type': 'image/jpeg'})
+            'Content-Type': image['_attachments'][size].content_type })
         if 'GET' == method
             response.end(imgResized)
         else
@@ -103,12 +104,12 @@ module.exports.saveImage = (albumName, input, callback) ->
     orch = new Orchestra()
     generateId orch.emitter('id')
     identify = im.identify orch.emitter('im')
-    input.on 'end', orch.emitter('end')
 
-    orch.on 'id,end', (data) -> callback(data.id[0][1])
     orch.on 'id,im', (data) -> withDB (db) ->
         metadata = data.im[0][1]
+        format = metadata.format.toLowerCase()
         imgDoc =
+          format: format
           album: albumName
           width: metadata.width
           height: metadata.height
@@ -116,19 +117,22 @@ module.exports.saveImage = (albumName, input, callback) ->
           datetime: metadata.Properties && metadata.Properties['exif:DateTime']
           model: metadata.Properties && metadata.Properties['exif:Model']
           cache: {}
-        db.insert imgDoc, data.id[0][1], (err, doc) ->
-            resize imgData.content(), metadata.width, metadata.height, metadata.quality, (imgClean) ->
-                db.attachment.insert doc.id, 'original', imgClean, 'image/jpeg', {rev: doc.rev},
+        mimetype = 'image/' + format
+        id = data.id[0][1]
+        callback id
+        db.insert imgDoc, id, (err, doc) ->
+            resize imgData.content(), metadata.width, metadata.height, format, metadata.quality, (imgClean) ->
+                db.attachment.insert doc.id, 'original', imgClean, mimetype, {rev: doc.rev},
                     (err) ->
                         db.get albumName, (err, album) ->
                             for own k, v of album
-                                (saveResized(imgClean, imgDoc, k, v, doc.id) unless nonSizes.indexOf(k) != -1)
+                                (saveResized(imgClean, imgDoc, k, v, mimetype, doc.id) unless nonSizes.indexOf(k) != -1)
 
     input.setEncoding 'binary'
     input.on 'data', (chunk) ->
         imgData.write(chunk, 'binary')
         identify.write(chunk, 'binary')
-    orch.on 'end', -> identify.end()
+    input.on 'end', -> identify.end()
 
 geometryEquals = (a, b) -> a.width == b.width && a.height == b.height
 
@@ -149,7 +153,7 @@ module.exports.retrieve = (method, album, size, id, res) -> withDB (db) ->
                 else
                     res.writeHead(200, {
                         'Content-Length': image['_attachments'][size].length,
-                        'Content-Type': 'image/jpeg'})
+                        'Content-Type': image['_attachments'][size].content_type })
                     if 'GET' == method
                         stream = db.attachment.get id, size
                         stream.on 'data', (chunk) -> res.write(chunk, 'binary')
