@@ -20,9 +20,9 @@ app.put '/:album', (req, res) ->
         res.send(JSON.stringify(result) + "\n", error_codes[result.error])
 
 app.post '/:album', (req, res) ->
-    imagenie.saveImage req.params.album, req, (id) ->
-        body = JSON.stringify({ok: true, id: id}) + "\n"
-        res.writeHead 201, {
+    imagenie.saveImage req.params.album, req, (status, result) ->
+        body = JSON.stringify(result) + "\n"
+        res.writeHead status, {
             'Content-Length': body.length,
             'Content-Type': 'application/json'}
         res.end body

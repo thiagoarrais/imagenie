@@ -107,7 +107,8 @@ module.exports.saveImage = (albumName, input, callback) ->
 
     orch.on 'id,im', (data) -> withDB (db) ->
         metadata = data.im[0][1]
-        format = metadata.format.toLowerCase()
+        format = metadata?.format.toLowerCase()
+        return callback(400, {error: true, reason: 'Not an image'}) unless format
         imgDoc =
           format: format
           album: albumName
@@ -119,7 +120,7 @@ module.exports.saveImage = (albumName, input, callback) ->
           cache: {}
         mimetype = 'image/' + format
         id = data.id[0][1]
-        callback id
+        callback 201, {ok: true, id: id}
         db.insert imgDoc, id, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, format, metadata.quality, (imgClean) ->
                 db.attachment.insert doc.id, 'original', imgClean, mimetype, {rev: doc.rev},
