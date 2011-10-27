@@ -51,10 +51,10 @@ cacheSize = (id, name, size, image, method, response) -> withDB (db) ->
     imgOriginal = new AutoBuffer(image['_attachments'].original.length)
     stream = db.attachment.get id, 'original'
     stream.on 'data', (chunk) -> imgOriginal.write(chunk)
-    stream.on 'end', -> saveResized(imgOriginal.content(), image, name, size, image['_attachments'][size].content_type, id, (imgResized) ->
+    stream.on 'end', -> saveResized(imgOriginal.content(), image, name, size, image['_attachments'].original.content_type, id, (imgResized) ->
         response.writeHead(200, {
             'Content-Length': imgResized.length,
-            'Content-Type': image['_attachments'][size].content_type })
+            'Content-Type': image['_attachments'].original.content_type })
         if 'GET' == method
             response.end(imgResized)
         else
