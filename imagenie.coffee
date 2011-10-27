@@ -104,8 +104,10 @@ module.exports.saveImage = (albumName, input, callback) ->
     orch = new Orchestra()
     generateId orch.emitter('id')
     identify = im.identify orch.emitter('im')
+    withDB (db) -> db.get albumName, orch.emitter('album')
 
-    orch.on 'id,im', (data) -> withDB (db) ->
+    orch.on 'id,im,album', (data) -> withDB (db) ->
+        return callback 404, {error: 'not_found', reason: 'no such album'} if 404 == data.album[0][2]['status-code']
         metadata = data.im[0][1]
         format = metadata?.format.toLowerCase()
         return callback(400, {error: true, reason: 'Not an image'}) unless format
