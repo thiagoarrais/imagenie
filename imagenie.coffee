@@ -122,7 +122,7 @@ module.exports.saveImage = (albumName, input, callback) ->
           cache: {}
         mimetype = 'image/' + format
         id = data.id[0][1]
-        callback 201, {ok: true, id: id}
+        callback 201, {ok: true, id: id}, '/' + albumName + '/' + id
         db.insert imgDoc, id, (err, doc) ->
             resize imgData.content(), metadata.width, metadata.height, format, metadata.quality, (imgClean) ->
                 db.attachment.insert doc.id, 'original', imgClean, mimetype, {rev: doc.rev},
