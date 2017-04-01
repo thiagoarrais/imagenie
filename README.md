@@ -1,8 +1,9 @@
 imagenie
 ========
 
-imagenie is a simple web app for RESTful image hosting intended for learning and
-study
+imagenie is a simple web app for RESTful image hosting.
+
+this is a toy project for study only. do not use it in production.
 
 Try this
 --------
